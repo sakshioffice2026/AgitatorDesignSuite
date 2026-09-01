@@ -1,0 +1,74 @@
+﻿@using Agitator.Core.Entities
+@using Agitator.Models.ViewModel
+@model ProjectFormViewModel
+
+<fieldset class="mb-3">
+    <legend class="h6">Project</legend>
+    <div class="mb-2">
+        <label asp-for="Name" class="form-label"></label>
+        <input asp-for="Name" class="form-control" />
+        <span asp-validation-for="Name" class="text-danger small"></span>
+    </div>
+    <div class="mb-2">
+        <label asp-for="Description" class="form-label"></label>
+        <textarea asp-for="Description" class="form-control"></textarea>
+    </div>
+</fieldset>
+
+<fieldset class="mb-3">
+    <legend class="h6">Vessel</legend>
+    <div class="row g-2">
+        <div class="col-md-6">
+            <label asp-for="VesselDiameterM" class="form-label"></label>
+            <input asp-for="VesselDiameterM" type="number" step="0.01" class="form-control" />
+        </div>
+        <div class="col-md-6">
+            <label asp-for="LiquidHeightM" class="form-label"></label>
+            <input asp-for="LiquidHeightM" type="number" step="0.01" class="form-control" />
+        </div>
+        <div class="col-md-6 form-check mt-3">
+            <input asp-for="HasBaffles" class="form-check-input" />
+            <label asp-for="HasBaffles" class="form-check-label"></label>
+        </div>
+        <div class="col-md-6">
+            <label asp-for="NumberOfBaffles" class="form-label"></label>
+            <input asp-for="NumberOfBaffles" type="number" class="form-control" />
+        </div>
+    </div>
+</fieldset>
+
+<fieldset class="mb-3">
+    <legend class="h6">Impeller</legend>
+    <div class="row g-2">
+        <div class="col-md-6">
+            <label asp-for="ImpellerType" class="form-label"></label>
+            <select asp-for="ImpellerType" asp-items="Html.GetEnumSelectList<ImpellerType>()" class="form-select"></select>
+        </div>
+        <div class="col-md-6">
+            <label asp-for="ImpellerDiameterM" class="form-label"></label>
+            <input asp-for="ImpellerDiameterM" type="number" step="0.001" class="form-control" />
+        </div>
+        <div class="col-md-6">
+            <label asp-for="RotationalSpeedRpm" class="form-label"></label>
+            <input asp-for="RotationalSpeedRpm" type="number" step="0.1" class="form-control" />
+        </div>
+        <div class="col-md-6">
+            <label asp-for="NumberOfImpellers" class="form-label"></label>
+            <input asp-for="NumberOfImpellers" type="number" class="form-control" />
+        </div>
+    </div>
+</fieldset>
+
+<fieldset class="mb-3">
+    <legend class="h6">Fluid Properties</legend>
+    <div class="row g-2">
+        <div class="col-md-6">
+            <label asp-for="DensityKgM3" class="form-label"></label>
+            <input asp-for="DensityKgM3" type="number" step="0.1" class="form-control" />
+        </div>
+        <div class="col-md-6">
+            <label asp-for="ViscosityPaS" class="form-label"></label>
+            <input asp-for="ViscosityPaS" type="number" step="0.0001" class="form-control" />
+        </div>
+    </div>
+</fieldset>

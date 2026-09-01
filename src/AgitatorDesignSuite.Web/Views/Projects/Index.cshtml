@@ -1,0 +1,12 @@
+﻿@using Agitator.Models.ViewModel
+@model List<ProjectListItemViewModel>
+@{
+    ViewData["Title"] = "Projects";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0">Projects</h1>
+    <a class="btn btn-primary" href="/Projects/Create"><i class="bi bi-plus-circle"></i> New Design</a>
+</div>
+
+@await Html.PartialAsync("_ProjectListTable", Model) 

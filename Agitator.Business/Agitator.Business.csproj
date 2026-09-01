@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="MathNet.Numerics" Version="5.0.0" />
+		<PackageReference Include="QuestPDF" Version="2024.10.3" />
+		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
+	</ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Agitator.Core\Agitator.Core.csproj" />
+		<ProjectReference Include="..\Agitator.Models\Agitator.Models.csproj" />
+		<ProjectReference Include="..\Agitator.Repositories\Agitator.Repositories.csproj" />
+	</ItemGroup>
+</Project>

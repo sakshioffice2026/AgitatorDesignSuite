@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UserSecretsId>agitator-design-suite-secrets</UserSecretsId>
+	</PropertyGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\..\Agitator.Core\Agitator.Core.csproj" />
+		<ProjectReference Include="..\..\Agitator.Utilities\Agitator.Utilities.csproj" />
+		<ProjectReference Include="..\..\Agitator.Business\Agitator.Business.csproj" />
+		<ProjectReference Include="..\..\Agitator.Models\Agitator.Models.csproj" />
+		<ProjectReference Include="..\..\Agitator.Repositories\Agitator.Repositories.csproj" />
+	</ItemGroup>
+</Project>

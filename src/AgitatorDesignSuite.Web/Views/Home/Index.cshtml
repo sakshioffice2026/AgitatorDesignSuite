@@ -1,0 +1,37 @@
+@using Agitator.Core.Entities
+@using Agitator.Models.ViewModel
+@model List<ProjectListItemViewModel>
+@{
+    ViewData["Title"] = "Dashboard";
+    var queued = Model.Count(p => p.CadStatus == CadJobStatus.Queued || p.CadStatus == CadJobStatus.Running);
+    var completed = Model.Count(p => p.CadStatus == CadJobStatus.Completed);
+}
+
+<h1 class="mb-4">Dashboard</h1>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <i class="bi bi-folder2-open"></i>
+            <div class="stat-value">@Model.Count</div>
+            <div class="stat-label">Total Projects</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <i class="bi bi-hourglass-split"></i>
+            <div class="stat-value">@queued</div>
+            <div class="stat-label">CAD Jobs In Progress</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <i class="bi bi-check-circle"></i>
+            <div class="stat-value">@completed</div>
+            <div class="stat-label">3D Models Completed</div>
+        </div>
+    </div>
+</div>
+
+<h2 class="h5 mb-3">Recent Projects</h2>
+@await Html.PartialAsync("_ProjectListTable", Model)
