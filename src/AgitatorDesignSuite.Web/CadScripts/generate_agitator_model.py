@@ -389,14 +389,16 @@ def _foil_section_wire(
     skew_deg=0.0,
     camber=0.0,
     sweep=0.0,
-    samples=16
+    samples=16,
+    smooth=True
 ):
     """
-    Closed polygonal hydrofoil-like section.
+    Closed hydrofoil-like section — smooth (BSpline) by default, or a
+    straight-edge polygon if smooth=False.
 
     The section is generated in a local radial/tangential/axial frame,
-    then pitched and skewed. Increasing sample count gives smoother
-    FreeCAD lofts without changing the external params contract.
+    then pitched and skewed. Increasing sample count gives a more
+    accurate curve/loft without changing the external params contract.
     """
     points = []
 
@@ -463,8 +465,109 @@ def _foil_section_wire(
             p.y += sweep
             points.append(p)
 
+    if smooth:
+        # Fit a smooth periodic BSpline through the same sampled points
+        # instead of connecting them with straight polygon edges — this
+        # is what removes the faceted/ribbed look and gives a rounded
+        # blade cross-section. No new geometry data, just a smooth
+        # interpolation of the points already computed above.
+        bspline = Part.BSplineCurve()
+        bspline.interpolate(points, PeriodicFlag=True)
+        return Part.Wire([bspline.toShape()])
+
     points.append(points[0])
     return Part.makePolygon(points)
+
+
+def _rounded_paddle_wire(
+    root_radius_local,
+    tip_radius_local,
+    chord_root,
+    chord_tip,
+    samples=8
+):
+    """
+    Closed, smoothly rounded paddle outline in the local
+    (spanwise, tangential) plane: a rounded root cap tapering to a
+    rounded tip cap, joined by smooth sides. Uses the same periodic-
+    BSpline-through-sampled-points technique as _foil_section_wire —
+    proven self-intersection-safe for this kind of convex outline.
+    """
+    span = tip_radius_local - root_radius_local
+    # Clamp cap radii so a cap can never wrap past the shaft axis
+    # (overlapping the hub / opposite blades) or exceed the blade's
+    # own span. chord_root/chord_tip are tangential half-widths in
+    # the old loft formulation — they aren't automatically safe as a
+    # circle radius here, so they need bounding against the actual
+    # local geometry.
+    r0 = min(chord_root / 2.0, span * 0.4, root_radius_local * 0.9)
+    r1 = min(chord_tip / 2.0, span * 0.4)
+    points = []
+
+    for i in range(samples + 1):
+        theta = math.radians(90 + 180 * (i / samples))
+        points.append(App.Vector(
+            root_radius_local + r0 * math.cos(theta),
+            r0 * math.sin(theta),
+            0
+        ))
+
+    for i in range(samples + 1):
+        theta = math.radians(-90 + 180 * (i / samples))
+        points.append(App.Vector(
+            tip_radius_local + r1 * math.cos(theta),
+            r1 * math.sin(theta),
+            0
+        ))
+
+    bspline = Part.BSplineCurve()
+    bspline.interpolate(points, PeriodicFlag=True)
+    return Part.Wire([bspline.toShape()])
+
+
+def _paddle_blade(
+    radius_root,
+    radius_tip,
+    chord_root,
+    chord_tip,
+    thickness,
+    pitch_deg,
+    samples=8
+):
+    """
+    Flat, rounded-perimeter paddle blade: uniform thickness, single
+    rigid pitch tilt, all edges filleted. Matches a smooth toy/
+    reference propeller silhouette (rounded root, sides and tip)
+    rather than a twisted hydrofoil. Built as an extruded prism with
+    every edge filleted — far more robust to fillet than a
+    multi-station NURBS loft, since it's simple flat-face geometry.
+    """
+    wire = _rounded_paddle_wire(
+        radius_root, radius_tip, chord_root, chord_tip, samples=samples
+    )
+    face = Part.Face(wire)
+    solid = face.extrude(App.Vector(0, 0, thickness))
+    solid.translate(App.Vector(0, 0, -thickness / 2.0))
+
+    solid.rotate(
+        App.Vector(radius_root, 0, 0),
+        App.Vector(1, 0, 0),
+        pitch_deg
+    )
+
+    fillet_radius = max(
+        0.5,
+        min(thickness, chord_tip, chord_root) * 0.35
+    )
+    try:
+        solid = solid.makeFillet(fillet_radius, solid.Edges)
+    except Exception:
+        print(
+            "WARNING: paddle blade edge fillet failed; "
+            "leaving sharp edges."
+        )
+
+    return solid
 
 
 def _lofted_blade(
@@ -479,11 +582,15 @@ def _lofted_blade(
     skew_root,
     skew_tip,
     camber,
-    stations=8
+    stations=8,
+    round_tip=False
 ):
     """
     Creates one continuous 3-D blade using multiple spanwise
     hydrofoil sections rather than separate rectangular solids.
+
+    round_tip=True fillets the outer-radius end cap into a rounded/
+    blunt tip instead of leaving it as a flat cut-off face.
     """
     if stations < 3:
         stations = 3
@@ -536,11 +643,71 @@ def _lofted_blade(
             )
         )
 
-    return Part.makeLoft(
-        wires,
-        True,
-        False
-    )
+    try:
+        blade = Part.makeLoft(
+            wires,
+            True,
+            False
+        )
+    except Part.OCCError:
+        # At higher skew/pitch/camber combinations (e.g. marine propeller)
+        # the smooth BSpline section can self-intersect enough that OCC
+        # rejects the loft. Fall back to the straight-edge polygon
+        # sections for this blade rather than failing the whole job —
+        # same underlying points, just joined with straight segments.
+        print(
+            "WARNING: smooth blade loft failed for this blade; "
+            "falling back to straight-edge sections."
+        )
+        wires = [
+            _foil_section_wire(
+                radius_root + (radius_tip - radius_root) * (i / (stations - 1)),
+                chord_root + (chord_tip - chord_root) * (i / (stations - 1)),
+                thickness_root + (thickness_tip - thickness_root) * (i / (stations - 1)),
+                pitch_root + (pitch_tip - pitch_root) * (i / (stations - 1)),
+                skew_root + (skew_tip - skew_root) * (i / (stations - 1)),
+                camber,
+                (chord_root - (chord_root + (chord_tip - chord_root) * (i / (stations - 1)))) * 0.10,
+                smooth=False
+            )
+            for i in range(stations)
+        ]
+        blade = Part.makeLoft(
+            wires,
+            True,
+            False
+        )
+
+    if round_tip:
+        # Identify the tip end-cap face by finding the solid's face
+        # whose center of mass is closest to the tip cross-section
+        # wire's center — the side (lateral) faces run the full span
+        # so their centers sit well away from the tip plane, while the
+        # cap face sits right on it.
+        try:
+            tip_center = wires[-1].CenterOfMass
+            tip_face = min(
+                blade.Faces,
+                key=lambda f: f.CenterOfMass.distanceToPoint(tip_center)
+            )
+            fillet_radius = max(
+                0.5,
+                min(thickness_tip, chord_tip) * 0.48
+            )
+            blade = blade.makeFillet(
+                fillet_radius,
+                tip_face.OuterWire.Edges
+            )
+        except Exception:
+            print(
+                "WARNING: tip rounding fillet failed; "
+                "leaving tip as a flat cap."
+            )
+
+    return blade
+
+
+
 
 
 def _make_hub(prm):
@@ -624,11 +791,11 @@ def build_pitched_blade_turbine(prm, z_offset_mm):
 
 def build_marine_propeller(prm, z_offset_mm):
     """
-    Parametric twisted propeller-style blade.
-
-    This is a continuous lofted blade with spanwise pitch/chord/skew
-    variation. It is substantially different from the old segmented-box
-    approximation, while remaining controlled by the existing params.
+    Flat rounded-perimeter paddle blade (see _paddle_blade) — matches
+    a smooth toy/reference propeller silhouette rather than a twisted
+    hydrofoil. Chord taper still follows the existing blade_width
+    param; thickness and pitch are uniform/rigid rather than
+    spanwise-varying, since a flat paddle has neither.
     """
     D = prm.impeller_diameter_mm
 
@@ -637,13 +804,6 @@ def build_marine_propeller(prm, z_offset_mm):
     )
     radius_tip = D / 2.0
 
-    pitch_root = (
-        prm.blade_pitch_angle_deg * 1.20
-    )
-    pitch_tip = (
-        prm.blade_pitch_angle_deg * 0.55
-    )
-
     chord_root = (
         prm.blade_width_mm * 1.35
     )
@@ -651,31 +811,17 @@ def build_marine_propeller(prm, z_offset_mm):
         prm.blade_width_mm * 0.55
     )
 
-    thickness_root = (
-        prm.blade_thickness_mm * 1.25
-    )
-    thickness_tip = max(
-        prm.blade_thickness_mm * 0.35,
-        1.0
-    )
-
     solid = _make_hub(prm)
     count = max(3, prm.blade_count)
 
     for i in range(count):
-        blade = _lofted_blade(
+        blade = _paddle_blade(
             radius_root,
             radius_tip,
             chord_root,
             chord_tip,
-            thickness_root,
-            thickness_tip,
-            pitch_root,
-            pitch_tip,
-            -12.0,
-            18.0,
-            0.30,
-            stations=10
+            prm.blade_thickness_mm,
+            prm.blade_pitch_angle_deg
         )
 
         blade.rotate(

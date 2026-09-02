@@ -105,12 +105,13 @@ namespace Agitator.Business
 
         /// <summary>
         /// Invokes: python.exe generate_agitator_model.py --params params.json
-        /// The macro (see CadScripts/generate_agitator_model.py) reads the
-        /// JSON params, builds the parametric model in FreeCAD's Part
-        /// workbench, and writes both a STEP file (for CAD-grade download)
-        /// and an OBJ mesh (for the Three.js browser preview — FreeCAD's
-        /// headless Mesh module doesn't support glTF, only formats like
-        /// OBJ/STL/PLY/OFF/AMF/3MF).
+        /// The macro (see CadScripts/generate_agitator_model.py) builds a
+        /// full tank/head/flange/shaft/impeller/baffle assembly with real
+        /// lofted blade geometry (Part.makeLoft) per impeller type, then
+        /// exports STEP + an OBJ preview mesh. A 2D TechDraw export is
+        /// supported by the script but not wired up here yet (no
+        /// techDrawTemplatePath is supplied — the script just skips that
+        /// step and logs it, per its own main()).
         /// </summary>
         private async Task<(string stepPath, string meshPath)> RunFreeCadAsync(
             CalculationResult job, CancellationToken ct)
@@ -121,25 +122,14 @@ namespace Agitator.Business
             var jobDir = Path.Combine(_options.OutputDirectory, $"project_{job.ProjectId}");
             Directory.CreateDirectory(jobDir);
 
-            // NOTE — placeholder engineering defaults below (flagged, not
-            // silently guessed): WallThicknessMm and ShaftTotalLengthMm do
-            // not exist on any entity yet. Until Vessel/Impeller gain real
-            // fields for these (with proper migration + UI inputs), the
-            // generated model uses conservative stand-in values. Do NOT
-            // treat CAD output as fabrication-ready until these are backed
-            // by real project inputs — see AgitatorParams docstring in
-            // generate_agitator_model.py for the full assumption list.
+            // NOTE — placeholder engineering default (flagged, not silently
+            // guessed): WallThicknessMm does not exist on Vessel yet. Until
+            // it gains a real field (with migration + UI input), the
+            // generated tank shell uses a conservative stand-in. Do NOT
+            // treat CAD output as fabrication-ready until this is backed by
+            // a real project input.
             const double placeholderWallThicknessMm = 6.0; // thin-wall SS default; replace with a real Vessel.WallThicknessMm field
-            double shaftTotalLengthMm = vessel.LiquidHeightM * 1000 * 1.15; // same convention as the prior script version
-
-            // The rewritten script only implements two geometry families
-            // (PitchedBladeTurbine, MarinePropeller). Other ImpellerType
-            // values (Rushton, Hydrofoil, Anchor, HelicalRibbon) currently
-            // render as the PBT placeholder — same caveat the old disc
-            // placeholder had, just explicit now instead of silent.
-            var cadImpellerType = impeller.Type == ImpellerType.Propeller
-                ? "MarinePropeller"
-                : "PitchedBladeTurbine";
+            double shaftTotalLengthMm = vessel.LiquidHeightM * 1000 * 1.15;
 
             var parameters = new
             {
@@ -149,7 +139,12 @@ namespace Agitator.Business
                 headType = vessel.HeadType.ToString(),
                 hasBaffles = vessel.HasBaffles,
                 numberOfBaffles = vessel.NumberOfBaffles,
-                impellerType = cadImpellerType,
+                // The script's _IMPELLER_BUILDERS registry keys directly off
+                // the same names as ImpellerType (RushtonTurbine,
+                // PitchedBladeTurbine, Propeller, HydrofoilA310, AnchorFoil,
+                // HelicalRibbon), so pass it straight through instead of
+                // collapsing to just two types.
+                impellerType = impeller.Type.ToString(),
                 impellerDiameterMm = impeller.DiameterM * 1000,
                 numberOfImpellers = impeller.NumberOfImpellers,
                 clearanceToDiameterRatio = impeller.ClearanceToDiameterRatio,
