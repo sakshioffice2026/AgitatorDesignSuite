@@ -384,6 +384,249 @@ def build_marine_propeller(prm: AgitatorParams, z_offset_mm):
     return solid
 
 
+def build_rushton_turbine(prm: AgitatorParams, z_offset_mm: float):
+    """
+    Standard Rushton disc turbine.
+
+    Proportions per Oldshue (1983) / Paul-Atiemo-Obeng-Kresta (2004):
+      - 6 flat vertical blades, always (blade_count param is ignored)
+      - D_disc  = 0.67 × D_impeller
+      - W_blade = 0.20 × D_impeller  (axial height of each blade)
+      - Blade radial extent: from disc OD to impeller tip
+      - Blade thickness: prm.blade_thickness_mm (tangential direction)
+
+    The disc is centred at z = 0 relative to the impeller; blades are
+    mounted radially on the disc periphery, flat face tangential (no pitch).
+    This is a fabrication-envelope model — disc-to-hub weld detail and
+    blade-to-disc weld fillet are not modelled.
+    """
+    D = prm.impeller_diameter_mm
+    disc_od   = 0.67 * D
+    disc_t    = max(prm.blade_thickness_mm * 2.5, D * 0.04)  # disc axial thickness
+    blade_axial  = 0.20 * D                                   # W
+    blade_radial = D / 2.0 - disc_od / 2.0                   # from disc OD to tip
+    blade_t   = prm.blade_thickness_mm
+
+    hub = Part.makeCylinder(prm.hub_diameter_mm / 2.0, prm.hub_height_mm)
+    hub.translate(App.Vector(0, 0, -prm.hub_height_mm / 2.0))
+
+    disc = Part.makeCylinder(disc_od / 2.0, disc_t)
+    disc.translate(App.Vector(0, 0, -disc_t / 2.0))
+
+    blades = []
+    for i in range(6):
+        ang = i * 60.0
+        # Box: X = radial direction, Y = tangential (thickness), Z = axial
+        blade = Part.makeBox(blade_radial, blade_t, blade_axial)
+        blade.translate(App.Vector(0, -blade_t / 2.0, -blade_axial / 2.0))
+        blade.translate(App.Vector(disc_od / 2.0, 0, 0))
+        blade.rotate(App.Vector(0, 0, 0), App.Vector(0, 0, 1), ang)
+        blades.append(blade)
+
+    solid = hub.fuse(disc)
+    for b in blades:
+        solid = solid.fuse(b)
+    solid.translate(App.Vector(0, 0, z_offset_mm))
+    return solid
+
+
+def build_hydrofoil_a310(prm: AgitatorParams, z_offset_mm: float):
+    """
+    Approximate Lightnin A310-style hydrofoil: 3 narrow-chord blades at
+    low pitch, producing efficient axial downward pumping.
+
+    Forced geometry (A310 family):
+      - 3 blades
+      - Chord ≈ 0.15 × D_impeller
+      - Pitch angle ≈ 30° (low, for axial-flow efficiency)
+      - No disc — hub-mounted
+
+    Blade cross-section is modelled as a flat plate (the actual A310 uses
+    a cambered aerofoil section; a flat plate is a geometry approximation
+    adequate for clearance checks and mass estimation only).
+    """
+    hub = Part.makeCylinder(prm.hub_diameter_mm / 2.0, prm.hub_height_mm)
+    hub.translate(App.Vector(0, 0, -prm.hub_height_mm / 2.0))
+
+    blade_count   = 3
+    blade_len     = (prm.impeller_diameter_mm - prm.hub_diameter_mm) / 2.0
+    blade_chord   = prm.impeller_diameter_mm * 0.15   # narrow chord
+    pitch_angle   = 30.0
+    blade_t       = prm.blade_thickness_mm
+
+    blades = []
+    for i in range(blade_count):
+        ang = 360.0 / blade_count * i
+        blade = Part.makeBox(blade_len, blade_chord, blade_t)
+        blade.translate(App.Vector(0, -blade_chord / 2.0, -blade_t / 2.0))
+        blade.rotate(App.Vector(0, 0, 0), App.Vector(0, 1, 0), pitch_angle)
+        blade.translate(App.Vector(prm.hub_diameter_mm / 2.0, 0, 0))
+        blade.rotate(App.Vector(0, 0, 0), App.Vector(0, 0, 1), ang)
+        blades.append(blade)
+
+    solid = hub
+    for b in blades:
+        solid = solid.fuse(b)
+    solid.translate(App.Vector(0, 0, z_offset_mm))
+    return solid
+
+
+def build_anchor_foil(prm: AgitatorParams, z_offset_mm: float):
+    """
+    Close-clearance anchor agitator — two vertical sweep arms connected by
+    horizontal top and bottom cross-bars.
+
+    Sizing assumption:
+      impeller_diameter_mm ≈ tank_id_mm − 2 × desired_clearance.
+      This builder uses that diameter as the sweep radius; the calling code
+      is responsible for setting the diameter appropriately. Typical wall
+      clearance for anchors: 5–10 % of tank diameter (unbaffled, high-µ).
+
+    Arm span = 85 % of liquid_height_mm.  Arm radial depth = blade_width_mm.
+    Arm tangential thickness = blade_thickness_mm × 3.  Cross-bar axial
+    thickness = blade_thickness_mm × 2.
+    """
+    R         = prm.impeller_diameter_mm / 2.0
+    arm_h     = prm.liquid_height_mm * 0.85
+    arm_w     = prm.blade_width_mm          # radial depth (wall-facing dimension)
+    arm_t     = prm.blade_thickness_mm * 3.0
+    bar_t     = prm.blade_thickness_mm * 2.0
+
+    hub = Part.makeCylinder(prm.hub_diameter_mm / 2.0, prm.hub_height_mm)
+    hub.translate(App.Vector(0, 0, -prm.hub_height_mm / 2.0))
+
+    top_bar = Part.makeBox(2.0 * R, arm_t, bar_t)
+    top_bar.translate(App.Vector(-R, -arm_t / 2.0, arm_h / 2.0 - bar_t))
+
+    bot_bar = Part.makeBox(2.0 * R, arm_t, bar_t)
+    bot_bar.translate(App.Vector(-R, -arm_t / 2.0, -arm_h / 2.0))
+
+    def make_arm(angle_deg):
+        arm = Part.makeBox(arm_w, arm_t, arm_h)
+        arm.translate(App.Vector(R - arm_w, -arm_t / 2.0, -arm_h / 2.0))
+        arm.rotate(App.Vector(0, 0, 0), App.Vector(0, 0, 1), angle_deg)
+        return arm
+
+    solid = hub.fuse(top_bar).fuse(bot_bar).fuse(make_arm(0.0)).fuse(make_arm(180.0))
+    solid.translate(App.Vector(0, 0, z_offset_mm))
+    return solid
+
+
+def _build_helix_segments(radius: float, height: float, pitch: float,
+                           width: float, thickness: float, steps: int = 48):
+    """
+    Approximate a single helix ribbon as `steps` fused angled box segments.
+    Fallback used when Part.Wire.makePipeShell is unavailable on this build.
+
+    Each segment spans (height/steps) in Z and subtends (360/steps_per_turn)
+    degrees; it is tilted at the local helix angle so consecutive segments
+    are co-planar at their shared face.  A 5 % length overlap prevents gaps
+    from floating-point rounding.
+    """
+    total_angle = (height / pitch) * 360.0
+    da_deg      = total_angle / steps
+    dz          = height / steps
+    arc         = radius * math.radians(da_deg)
+    seg_len     = math.hypot(dz, arc) * 1.05   # 5 % overlap
+    helix_ang   = math.degrees(math.atan2(dz, arc))
+
+    parts = []
+    for s in range(steps):
+        angle_mid = (s + 0.5) * da_deg
+        z_mid     = (s + 0.5) * dz
+
+        seg = Part.makeBox(width, thickness, seg_len)
+        seg.translate(App.Vector(-width, -thickness / 2.0, -seg_len / 2.0))
+        seg.rotate(App.Vector(0, 0, 0), App.Vector(0, 1, 0), helix_ang)
+        seg.translate(App.Vector(radius, 0, z_mid))
+        seg.rotate(App.Vector(0, 0, 0), App.Vector(0, 0, 1), angle_mid)
+        parts.append(seg)
+
+    result = parts[0]
+    for p in parts[1:]:
+        result = result.fuse(p)
+    return result
+
+
+def build_helical_ribbon(prm: AgitatorParams, z_offset_mm: float):
+    """
+    Double helical ribbon agitator — two counter-phase ribbons, 180° apart.
+
+    Pitch = 1 × D_impeller per revolution (standard ribbon proportions,
+    e.g. Nagata (1975)).  Ribbon span = liquid_height_mm.  Ribbon radial
+    depth = blade_width_mm.  Ribbon strip thickness = blade_thickness_mm.
+
+    Attempts Part.Wire.makePipeShell (Frenet-transported rectangular profile
+    along the helix) which produces a clean solid in FreeCAD 0.21 / 1.0+.
+    Falls back to a 48-segment box approximation on builds where the pipe-
+    shell call fails headlessly — see module assumption #2 for accuracy limits.
+
+    No baffles should be used with this impeller type (consistent with the
+    entity-layer HasBaffles flag on AnchorFoil / HelicalRibbon).
+    """
+    D       = prm.impeller_diameter_mm
+    R       = D / 2.0
+    pitch   = D * 1.0                       # 1 × D per revolution
+    turns   = max(1.5, prm.liquid_height_mm / pitch)
+    helix_h = turns * pitch
+    w       = prm.blade_width_mm            # radial depth of ribbon strip
+    t       = prm.blade_thickness_mm        # strip thickness
+
+    hub = Part.makeCylinder(prm.hub_diameter_mm / 2.0, helix_h)
+    hub.translate(App.Vector(0, 0, -helix_h / 2.0))
+    solid = hub
+
+    for idx in range(2):
+        try:
+            helix_edge = Part.makeHelix(pitch, helix_h, R)
+            spine = Part.Wire([helix_edge])
+            # Profile rectangle in the local XY plane at the helix start.
+            # X axis = radial (inward from helix radius), Z axis = axial.
+            pts = [
+                App.Vector(-w, -t / 2.0, 0),
+                App.Vector(0,  -t / 2.0, 0),
+                App.Vector(0,   t / 2.0, 0),
+                App.Vector(-w,  t / 2.0, 0),
+            ]
+            profile_wire = Part.Wire([
+                Part.LineSegment(pts[0], pts[1]).toShape(),
+                Part.LineSegment(pts[1], pts[2]).toShape(),
+                Part.LineSegment(pts[2], pts[3]).toShape(),
+                Part.LineSegment(pts[3], pts[0]).toShape(),
+            ])
+            shell  = spine.makePipeShell([profile_wire], True, True)
+            ribbon = Part.Solid(shell)
+        except Exception as ex:
+            print(f"WARNING: helix pipe-sweep failed ({ex}); "
+                  "falling back to segment approximation for ribbon {idx + 1}.")
+            ribbon = _build_helix_segments(R, helix_h, pitch, w, t, steps=48)
+
+        ribbon.rotate(App.Vector(0, 0, 0), App.Vector(0, 0, 1), idx * 180.0)
+        ribbon.translate(App.Vector(0, 0, -helix_h / 2.0))
+        solid = solid.fuse(ribbon)
+
+    solid.translate(App.Vector(0, 0, z_offset_mm))
+    return solid
+
+
+# ----------------------------------------------------------------------
+# IMPELLER TYPE → BUILDER DISPATCH TABLE
+# Keys match the .NET ImpellerType enum string values (serialised via
+# JsonStringEnumConverter) plus legacy aliases.  Any unrecognised type
+# falls back to PitchedBladeTurbine and logs a warning — it will never
+# silently produce the wrong geometry without flagging it.
+# ----------------------------------------------------------------------
+_IMPELLER_BUILDERS = {
+    "RushtonTurbine":       build_rushton_turbine,
+    "PitchedBladeTurbine":  build_pitched_blade_turbine,
+    "Propeller":            build_marine_propeller,
+    "MarinePropeller":      build_marine_propeller,   # legacy alias
+    "HydrofoilA310":        build_hydrofoil_a310,
+    "AnchorFoil":           build_anchor_foil,
+    "HelicalRibbon":        build_helical_ribbon,
+}
+
+
 def build_impellers(doc, prm: AgitatorParams):
     """Places N impellers along the shaft per clearance ratio and
     spacing. z=0 reference is the liquid surface / top-of-shell datum
@@ -391,13 +634,17 @@ def build_impellers(doc, prm: AgitatorParams):
     shaft_top_z = prm.shell_height_mm + prm.flange_nozzle_height_mm
     clearance_mm = prm.tank_od_mm * prm.impeller_clearance_ratio
 
+    builder = _IMPELLER_BUILDERS.get(prm.impeller_type)
+    if builder is None:
+        print(f"WARNING: unrecognised impeller type '{prm.impeller_type}'. "
+              "Falling back to PitchedBladeTurbine. Add an entry to "
+              "_IMPELLER_BUILDERS for this type.")
+        builder = build_pitched_blade_turbine
+
     objs = []
     for i in range(prm.number_of_impellers):
         z = shaft_top_z - prm.shaft_length_mm + clearance_mm + i * prm.impeller_spacing_mm
-        if prm.impeller_type == "MarinePropeller":
-            shape = build_marine_propeller(prm, z)
-        else:
-            shape = build_pitched_blade_turbine(prm, z)
+        shape = builder(prm, z)
         obj = doc.addObject("Part::Feature", f"Impeller_{i + 1}")
         obj.Shape = shape
         objs.append(obj)
