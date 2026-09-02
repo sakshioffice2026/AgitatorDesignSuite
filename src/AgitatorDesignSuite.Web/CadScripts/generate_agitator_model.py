@@ -484,7 +484,8 @@ def _rounded_paddle_wire(
     tip_radius_local,
     chord_root,
     chord_tip,
-    samples=8
+    samples=8,
+    blade_count=3
 ):
     """
     Closed, smoothly rounded paddle outline in the local
@@ -500,8 +501,25 @@ def _rounded_paddle_wire(
     # the old loft formulation — they aren't automatically safe as a
     # circle radius here, so they need bounding against the actual
     # local geometry.
-    r0 = min(chord_root / 2.0, span * 0.4, root_radius_local * 0.9)
-    r1 = min(chord_tip / 2.0, span * 0.4)
+    #
+    # BUG FIX: root_radius_local * 0.9 was a LINEAR clamp, not an
+    # ANGULAR one. At small root radius this still permits a root
+    # angular half-width of up to ~64° (128° total) — far wider than
+    # the ~90°/blade_count spacing between blades, so adjacent
+    # blades interpenetrated at the root. Clamp against the actual
+    # angular gap to neighboring blades instead, so blades can never
+    # overlap regardless of chord input.
+    half_spacing_deg = 0.5 * (360.0 / max(blade_count, 1))
+    angular_margin = 0.7  # keep caps within 70% of the gap to the next blade
+    r0_angle_limit = root_radius_local * math.sin(
+        math.radians(half_spacing_deg * angular_margin)
+    )
+    r1_angle_limit = tip_radius_local * math.sin(
+        math.radians(half_spacing_deg * angular_margin)
+    )
+
+    r0 = min(chord_root / 2.0, span * 0.4, r0_angle_limit)
+    r1 = min(chord_tip / 2.0, span * 0.4, r1_angle_limit)
     points = []
 
     for i in range(samples + 1):
@@ -532,7 +550,8 @@ def _paddle_blade(
     chord_tip,
     thickness,
     pitch_deg,
-    samples=8
+    samples=8,
+    blade_count=3
 ):
     """
     Flat, rounded-perimeter paddle blade: uniform thickness, single
@@ -543,7 +562,8 @@ def _paddle_blade(
     multi-station NURBS loft, since it's simple flat-face geometry.
     """
     wire = _rounded_paddle_wire(
-        radius_root, radius_tip, chord_root, chord_tip, samples=samples
+        radius_root, radius_tip, chord_root, chord_tip,
+        samples=samples, blade_count=blade_count
     )
     face = Part.Face(wire)
     solid = face.extrude(App.Vector(0, 0, thickness))
@@ -821,7 +841,8 @@ def build_marine_propeller(prm, z_offset_mm):
             chord_root,
             chord_tip,
             prm.blade_thickness_mm,
-            prm.blade_pitch_angle_deg
+            prm.blade_pitch_angle_deg,
+            blade_count=count
         )
 
         blade.rotate(
