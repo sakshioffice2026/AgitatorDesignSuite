@@ -121,16 +121,40 @@ namespace Agitator.Business
             var jobDir = Path.Combine(_options.OutputDirectory, $"project_{job.ProjectId}");
             Directory.CreateDirectory(jobDir);
 
+            // NOTE — placeholder engineering defaults below (flagged, not
+            // silently guessed): WallThicknessMm and ShaftTotalLengthMm do
+            // not exist on any entity yet. Until Vessel/Impeller gain real
+            // fields for these (with proper migration + UI inputs), the
+            // generated model uses conservative stand-in values. Do NOT
+            // treat CAD output as fabrication-ready until these are backed
+            // by real project inputs — see AgitatorParams docstring in
+            // generate_agitator_model.py for the full assumption list.
+            const double placeholderWallThicknessMm = 6.0; // thin-wall SS default; replace with a real Vessel.WallThicknessMm field
+            double shaftTotalLengthMm = vessel.LiquidHeightM * 1000 * 1.15; // same convention as the prior script version
+
+            // The rewritten script only implements two geometry families
+            // (PitchedBladeTurbine, MarinePropeller). Other ImpellerType
+            // values (Rushton, Hydrofoil, Anchor, HelicalRibbon) currently
+            // render as the PBT placeholder — same caveat the old disc
+            // placeholder had, just explicit now instead of silent.
+            var cadImpellerType = impeller.Type == ImpellerType.Propeller
+                ? "MarinePropeller"
+                : "PitchedBladeTurbine";
+
             var parameters = new
             {
-                vesselDiameterM = vessel.DiameterM,
-                liquidHeightM = vessel.LiquidHeightM,
+                tankOuterDiameterMm = vessel.DiameterM * 1000,
+                shellHeightMm = vessel.LiquidHeightM * 1000,
+                wallThicknessMm = placeholderWallThicknessMm,
+                headType = vessel.HeadType.ToString(),
                 hasBaffles = vessel.HasBaffles,
                 numberOfBaffles = vessel.NumberOfBaffles,
-                impellerType = impeller.Type.ToString(),
-                impellerDiameterM = impeller.DiameterM,
+                impellerType = cadImpellerType,
+                impellerDiameterMm = impeller.DiameterM * 1000,
                 numberOfImpellers = impeller.NumberOfImpellers,
                 clearanceToDiameterRatio = impeller.ClearanceToDiameterRatio,
+                shaftDiameterMm = job.RecommendedShaftDiameterMm,
+                shaftTotalLengthMm = shaftTotalLengthMm,
                 outputStepPath = Path.Combine(jobDir, "model.step"),
                 outputMeshPath = Path.Combine(jobDir, "preview.obj")
             };
