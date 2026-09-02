@@ -20,10 +20,11 @@ else
             @foreach (var p in Model)
             {
                 <tr>
-                    <td>@p.Name</td>
+                    <td><a href="/Projects/Detail/@p.Id">@p.Name</a></td>
                     <td>@p.CreatedAt.ToString("yyyy-MM-dd HH:mm") UTC</td>
                     <td><span class="badge bg-secondary">@p.CadStatus</span></td>
                     <td class="text-end">
+                        <a class="btn btn-sm btn-outline-dark" href="/Projects/Detail/@p.Id"><i class="bi bi-eye"></i> Detail</a>
                         <a class="btn btn-sm btn-outline-primary" href="/Projects/Results/@p.Id"><i class="bi bi-bar-chart"></i> Results</a>
                         <a class="btn btn-sm btn-outline-secondary" href="/Projects/Edit/@p.Id"><i class="bi bi-pencil"></i> Edit</a>
                     </td>

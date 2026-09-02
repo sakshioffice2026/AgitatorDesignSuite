@@ -4,10 +4,14 @@ generate_agitator_model.py
 Headless FreeCAD macro that builds a parametric agitator assembly
 (vessel + shaft + impeller + baffles) from a JSON parameter file, then
 exports a STEP file (CAD-grade, for download/import into other CAD tools)
-and a glTF mesh (lightweight, for the Three.js browser preview).
+and an OBJ mesh (lightweight, for the Three.js browser preview).
+
+NOTE: FreeCAD's headless Mesh module does not support writing .gltf/.glb
+(glTF export only exists in the GUI-only ImportGui module) — OBJ is used
+here instead since Mesh.write() supports it natively in headless mode.
 
 Invoked by CadJobBackgroundService.cs as:
-    freecadcmd generate_agitator_model.py --params params.json
+    python.exe generate_agitator_model.py --params params.json
 
 This is a starting skeleton, not a finished parametric model — extend the
 geometry building blocks below (vessel head type, multiple impellers,
@@ -111,9 +115,11 @@ def main():
     compound = Part.makeCompound(all_shapes)
     compound.exportStep(p["outputStepPath"])
 
-    # Export a lightweight mesh for the browser preview. Requires the
+    # Export a lightweight OBJ mesh for the browser preview. Requires the
     # FreeCAD Mesh workbench; adjust tessellation tolerance for
-    # preview quality vs. file size.
+    # preview quality vs. file size. outputMeshPath must end in a format
+    # Mesh.write() supports headlessly (.obj, .stl, .ply, .off, .amf, .3mf) —
+    # NOT .gltf/.glb, which require the GUI-only ImportGui module.
     import Mesh
     mesh_doc_objs = []
     for o in doc.Objects:

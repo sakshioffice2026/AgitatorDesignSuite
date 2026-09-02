@@ -5,9 +5,8 @@
     ViewData["Title"] = "Results";
     var r = Model.CalculationResult;
 }
-
-<h1 class="mb-4">@Model.Name — Results</h1>
-
+<h1 class="mb-1">@Model.Name</h1>
+<p class="mb-4" style="color:#64748B;font-size:0.9rem;">Calculated results and mechanical recommendations.</p>
 @if (r is null)
 {
     <p class="text-muted">No calculation results yet.</p>
@@ -60,8 +59,8 @@ else
         <h2 class="h6">3D Model Status: <span class="badge bg-secondary">@r.CadStatus</span></h2>
         @if (r.CadStatus == CadJobStatus.Completed && r.CadPreviewMeshPath != null)
         {
-            <div id="viewer-container" style="width:100%;height:400px;"></div>
-            <p><a href="@r.CadStepFilePath"><i class="bi bi-download"></i> Download STEP file</a></p>
+            <div id="viewer-container" style="width:100%;height:400px;background:#0b0f14;border-radius:6px;"></div>
+            <p class="mt-2"><a href="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"><i class="bi bi-download"></i> Download STEP file</a></p>
         }
         else if (r.CadStatus == CadJobStatus.Failed)
         {
@@ -79,14 +78,71 @@ else
 }
 
 @section Scripts {
-    <!--
-        Minimal Three.js viewer stub. Once CadJobBackgroundService produces a
-        glTF mesh, load it here with THREE.GLTFLoader (add the loader script
-        from cdnjs) and render it in #viewer-container. Left as a stub since
-        it depends on a real generated mesh file to test against.
-    -->
-    <script>
-        // TODO: wire up THREE.GLTFLoader against @Html.Raw(Json.Serialize(r?.CadPreviewMeshPath))
-        // once a real FreeCAD-generated mesh is available to test with.
-    </script>
+    @if (r?.CadStatus == CadJobStatus.Completed && r.CadPreviewMeshPath != null)
+    {
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/OBJLoader.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/controls/OrbitControls.js"></script>
+        <script>
+            (function () {
+                var container = document.getElementById('viewer-container');
+                var width = container.clientWidth;
+                var height = container.clientHeight;
+
+                var scene = new THREE.Scene();
+                var camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100000);
+
+                var renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(width, height);
+                container.appendChild(renderer.domElement);
+
+                scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+                var dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                dirLight.position.set(1, 1, 1);
+                scene.add(dirLight);
+
+                var controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+                var loader = new THREE.OBJLoader();
+                loader.load('@Url.Action("PreviewMesh", "Projects", new { id = Model.Id })', function (obj) {
+                    obj.traverse(function (child) {
+                        if (child.isMesh) {
+                            child.material = new THREE.MeshStandardMaterial({ color: 0x4a90d9 });
+                        }
+                    });
+
+                    var box = new THREE.Box3().setFromObject(obj);
+                    var center = box.getCenter(new THREE.Vector3());
+                    var size = box.getSize(new THREE.Vector3());
+                    var maxDim = Math.max(size.x, size.y, size.z) || 1;
+
+                    obj.position.sub(center);
+                    scene.add(obj);
+
+                    camera.position.set(maxDim, maxDim, maxDim);
+                    camera.lookAt(0, 0, 0);
+                    controls.target.set(0, 0, 0);
+                    controls.update();
+
+                    animate();
+                }, undefined, function (err) {
+                    container.innerHTML = '<p class="text-danger p-3 mb-0">Unable to load 3D preview.</p>';
+                    console.error('OBJ load failed:', err);
+                });
+
+                function animate() {
+                    requestAnimationFrame(animate);
+                    controls.update();
+                    renderer.render(scene, camera);
+                }
+
+                window.addEventListener('resize', function () {
+                    var w = container.clientWidth;
+                    var h = container.clientHeight;
+                    camera.aspect = w / h;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(w, h);
+                });
+            })();
+        </script>
+    }
 }

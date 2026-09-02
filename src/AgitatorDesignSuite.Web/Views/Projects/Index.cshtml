@@ -1,12 +1,43 @@
-﻿@using Agitator.Models.ViewModel
+@using Agitator.Core.Entities
+@using Agitator.Models.ViewModel
 @model List<ProjectListItemViewModel>
 @{
     ViewData["Title"] = "Projects";
+    var queued = Model.Count(p => p.CadStatus == CadJobStatus.Queued || p.CadStatus == CadJobStatus.Running);
+    var completed = Model.Count(p => p.CadStatus == CadJobStatus.Completed);
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="mb-0">Projects</h1>
-    <a class="btn btn-primary" href="/Projects/Create"><i class="bi bi-plus-circle"></i> New Design</a>
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="mb-1" style="font-family:'Space Grotesk',sans-serif;">Overview</h1>
+        <p class="mb-0" style="color:#64748B;font-size:0.9rem;">Your active agitator designs and CAD jobs.</p>
+    </div>
+    <a class="btn" href="/Projects/Create"><i class="bi bi-plus-circle"></i> New Project</a>
 </div>
 
-@await Html.PartialAsync("_ProjectListTable", Model) 
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <i class="bi bi-folder2-open"></i>
+            <div class="stat-value">@Model.Count</div>
+            <div class="stat-label">Total Projects</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <i class="bi bi-hourglass-split"></i>
+            <div class="stat-value">@queued</div>
+            <div class="stat-label">CAD Jobs In Progress</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <i class="bi bi-check-circle"></i>
+            <div class="stat-value">@completed</div>
+            <div class="stat-label">3D Models Completed</div>
+        </div>
+    </div>
+</div>
+
+<h2 class="h5 mb-3">Recent Projects</h2>
+@await Html.PartialAsync("_ProjectListTable", Model)

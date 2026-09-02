@@ -7,15 +7,23 @@
     var completed = Model.Count(p => p.CadStatus == CadJobStatus.Completed);
 }
 
-<h1 class="mb-4">Dashboard</h1>
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="mb-1" style="font-family:'Space Grotesk',sans-serif;">Overview</h1>
+        <p class="mb-0" style="color:#64748B;font-size:0.9rem;">Your active agitator designs and CAD jobs.</p>
+    </div>
+    <a class="btn" href="/Projects/Create"><i class="bi bi-plus-circle"></i> New Project</a>
+</div>
 
 <div class="row g-3 mb-4">
     <div class="col-md-4">
-        <div class="stat-card">
-            <i class="bi bi-folder2-open"></i>
-            <div class="stat-value">@Model.Count</div>
-            <div class="stat-label">Total Projects</div>
-        </div>
+        <a href="/Projects" class="stat-card-link">
+            <div class="stat-card">
+                <i class="bi bi-folder2-open"></i>
+                <div class="stat-value">@Model.Count</div>
+                <div class="stat-label">Total Projects</div>
+            </div>
+        </a>
     </div>
     <div class="col-md-4">
         <div class="stat-card">

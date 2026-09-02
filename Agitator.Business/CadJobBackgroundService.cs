@@ -12,9 +12,16 @@ using Microsoft.Extensions.Options;
 namespace Agitator.Business
 {
     /// <summary>
-    /// Polls MySQL for queued CAD jobs and runs FreeCAD headlessly
-    /// (freecadcmd) against a parametric macro, isolating the (slow, CPU
+    /// Polls MySQL for queued CAD jobs and runs the parametric macro via
+    /// FreeCAD's bundled Python interpreter, isolating the (slow, CPU
     /// heavy) CAD generation from the web request pipeline.
+    ///
+    /// NOTE: CadIntegrationOptions.FreeCadCmdPath should point at FreeCAD's
+    /// bundled python.exe (e.g. "...\FreeCAD 1.1\bin\python.exe"), not
+    /// freecadcmd.exe — as of FreeCAD 1.x, freecadcmd no longer
+    /// auto-executes a .py file passed on the command line (it just drops
+    /// to an interactive console instead); running the macro through
+    /// FreeCAD's own python.exe avoids that regression.
     ///
     /// Uses ApplicationDbContext directly (scoped per poll) rather than the
     /// repository layer since it runs outside any web request/DI scope as a
@@ -97,11 +104,13 @@ namespace Agitator.Business
         }
 
         /// <summary>
-        /// Invokes: freecadcmd generate_agitator_model.py --params params.json
+        /// Invokes: python.exe generate_agitator_model.py --params params.json
         /// The macro (see CadScripts/generate_agitator_model.py) reads the
         /// JSON params, builds the parametric model in FreeCAD's Part
         /// workbench, and writes both a STEP file (for CAD-grade download)
-        /// and a glTF mesh (for the Three.js browser preview).
+        /// and an OBJ mesh (for the Three.js browser preview — FreeCAD's
+        /// headless Mesh module doesn't support glTF, only formats like
+        /// OBJ/STL/PLY/OFF/AMF/3MF).
         /// </summary>
         private async Task<(string stepPath, string meshPath)> RunFreeCadAsync(
             CalculationResult job, CancellationToken ct)
@@ -123,7 +132,7 @@ namespace Agitator.Business
                 numberOfImpellers = impeller.NumberOfImpellers,
                 clearanceToDiameterRatio = impeller.ClearanceToDiameterRatio,
                 outputStepPath = Path.Combine(jobDir, "model.step"),
-                outputMeshPath = Path.Combine(jobDir, "preview.gltf")
+                outputMeshPath = Path.Combine(jobDir, "preview.obj")
             };
 
             var paramsPath = Path.Combine(jobDir, "params.json");

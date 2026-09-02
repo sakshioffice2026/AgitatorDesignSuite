@@ -1,4 +1,3 @@
-
 using Agitator.Business.Contracts;
 using Agitator.Core.Entities;
 using Agitator.Models.ViewModel;
@@ -9,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AgitatorDesignSuite.Web.Controllers
 {
-    
+
     public class ProjectsController : BaseController
     {
         private readonly IUnitOfWork _uow;
@@ -312,6 +311,48 @@ namespace AgitatorDesignSuite.Web.Controllers
                 TempData["Error"] = "Unable to generate report.";
                 return RedirectToAction(nameof(Results), new { id });
             }
+        }
+
+        // GET: /Projects/DownloadCadStep/5
+        // Streams the FreeCAD-generated STEP file over HTTP. Needed because
+        // the file lives on the server's local disk (CadIntegrationOptions
+        // .OutputDirectory) — browsers block file:// links to local paths,
+        // so the raw CadStepFilePath can never be used directly as an <a href>.
+        public async Task<IActionResult> DownloadCadStep(int id)
+        {
+            try
+            {
+                var project = await _uow.projectRepository.GetProjectDetailAsync(id);
+                if (project?.CalculationResult?.CadStepFilePath is null)
+                {
+                    TempData["Error"] = "No STEP file available for this project.";
+                    return RedirectToAction(nameof(Results), new { id });
+                }
+
+                var bytes = await System.IO.File.ReadAllBytesAsync(project.CalculationResult.CadStepFilePath);
+                return File(bytes, "application/step", $"{project.Name}-model.step");
+            }
+            catch (Exception ex)
+            {
+                await _uow.exceptionHandlerRepository.SaveException(nameof(ProjectsController), nameof(DownloadCadStep), ex);
+                TempData["Error"] = "Unable to download STEP file.";
+                return RedirectToAction(nameof(Results), new { id });
+            }
+        }
+
+        // GET: /Projects/PreviewMesh/5
+        // Serves the FreeCAD-generated OBJ preview mesh over HTTP (inline,
+        // not as an attachment) so the browser-side Three.js OBJLoader can
+        // fetch it via XHR — same file:// restriction as DownloadCadStep,
+        // just returned without a Content-Disposition download prompt.
+        public async Task<IActionResult> PreviewMesh(int id)
+        {
+            var project = await _uow.projectRepository.GetProjectDetailAsync(id);
+            if (project?.CalculationResult?.CadPreviewMeshPath is null)
+                return NotFound();
+
+            var bytes = await System.IO.File.ReadAllBytesAsync(project.CalculationResult.CadPreviewMeshPath);
+            return File(bytes, "text/plain");
         }
 
         private static ProjectDetailViewModel MapToDetailViewModel(Project project)
