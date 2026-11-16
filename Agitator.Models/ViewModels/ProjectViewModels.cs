@@ -13,6 +13,26 @@ namespace Agitator.Models.ViewModel
         public string? Description { get; set; }
         public DateTime CreatedAt { get; set; }
         public CadJobStatus CadStatus { get; set; }
+
+        // Dashboard summary fields (nullable: a project may not have a vessel,
+        // impeller or calculation yet).
+        public ImpellerType? ImpellerKind { get; set; }
+        public double? VesselDiameterM { get; set; }
+        public double? VesselLiquidHeightM { get; set; }
+        public double? MotorPowerKw { get; set; }
+        public double? RotationalSpeedRpm { get; set; }
+
+        public string ImpellerDisplayName =>
+            ImpellerKind.HasValue
+                ? System.Text.RegularExpressions.Regex
+                    .Replace(ImpellerKind.Value.ToString(), "(?<=[a-z])(?=[A-Z])", " ")
+                    .Replace(" Turbine", string.Empty)
+                : string.Empty;
+
+        public double? VesselVolumeLiters =>
+            VesselDiameterM.HasValue && VesselLiquidHeightM.HasValue
+                ? Math.PI / 4.0 * VesselDiameterM.Value * VesselDiameterM.Value * VesselLiquidHeightM.Value * 1000.0
+                : null;
     }
 
     // ============================================================

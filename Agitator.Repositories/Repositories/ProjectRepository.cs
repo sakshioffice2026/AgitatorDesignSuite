@@ -27,7 +27,12 @@ namespace Agitator.Repositories.Repositories
                     Name = p.Name,
                     Description = p.Description,
                     CreatedAt = p.CreatedAt,
-                    CadStatus = p.CalculationResult != null ? p.CalculationResult.CadStatus : CadJobStatus.NotRequested
+                    CadStatus = p.CalculationResult != null ? p.CalculationResult.CadStatus : CadJobStatus.NotRequested,
+                    ImpellerKind = p.Impeller != null ? (ImpellerType?)p.Impeller.Type : null,
+                    RotationalSpeedRpm = p.Impeller != null ? (double?)p.Impeller.RotationalSpeedRpm : null,
+                    VesselDiameterM = p.Vessel != null ? (double?)p.Vessel.DiameterM : null,
+                    VesselLiquidHeightM = p.Vessel != null ? (double?)p.Vessel.LiquidHeightM : null,
+                    MotorPowerKw = p.CalculationResult != null ? (double?)p.CalculationResult.RecommendedMotorPowerKw : null
                 })
                 .ToListAsync();
         }

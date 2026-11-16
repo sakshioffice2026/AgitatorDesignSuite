@@ -1,45 +1,178 @@
+@using System.Globalization
 @using Agitator.Core.Entities
 @using Agitator.Models.ViewModel
 @model List<ProjectListItemViewModel>
 @{
     ViewData["Title"] = "Dashboard";
-    var queued = Model.Count(p => p.CadStatus == CadJobStatus.Queued || p.CadStatus == CadJobStatus.Running);
+    var inv = CultureInfo.InvariantCulture;
+
+    var inProgress = Model.Count(p => p.CadStatus == CadJobStatus.Queued || p.CadStatus == CadJobStatus.Running);
     var completed = Model.Count(p => p.CadStatus == CadJobStatus.Completed);
+
+    var latest = Model.OrderByDescending(p => p.CreatedAt).FirstOrDefault();
+    var latestModel = Model
+        .Where(p => p.CadStatus == CadJobStatus.Completed)
+        .OrderByDescending(p => p.CreatedAt)
+        .FirstOrDefault();
+
+    var recent = Model.OrderByDescending(p => p.CreatedAt).Take(5).ToList();
 }
 
-<div class="d-flex justify-content-between align-items-start mb-4">
+<div class="page-header">
     <div>
-        <h1 class="mb-1" style="font-family:'Space Grotesk',sans-serif;">Overview</h1>
-        <p class="mb-0" style="color:#64748B;font-size:0.9rem;">Your active agitator designs and CAD jobs.</p>
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-subtitle">Start a new design or jump back into your work.</p>
     </div>
-    <a class="btn" href="/Projects/Create"><i class="bi bi-plus-circle"></i> New Project</a>
+    <div class="cta-block">
+        <div class="cta-label">Primary call to action</div>
+        <a class="btn-cta" href="/Projects/Create"><i class="bi bi-plus-lg"></i> New Project</a>
+    </div>
 </div>
 
-<div class="row g-3 mb-4">
+<div class="row g-3">
     <div class="col-md-4">
-        <a href="/Projects" class="stat-card-link">
-            <div class="stat-card">
-                <i class="bi bi-folder2-open"></i>
-                <div class="stat-value">@Model.Count</div>
-                <div class="stat-label">Total Projects</div>
-            </div>
+        <a class="stat-tile" href="/Projects">
+            <i class="bi bi-folder2 stat-tile-icon"></i>
+            <div class="stat-tile-value">@Model.Count</div>
+            <div class="stat-tile-label">@Model.Count Projects</div>
         </a>
     </div>
     <div class="col-md-4">
-        <div class="stat-card">
-            <i class="bi bi-hourglass-split"></i>
-            <div class="stat-value">@queued</div>
-            <div class="stat-label">CAD Jobs In Progress</div>
+        <div class="stat-tile">
+            <i class="bi bi-gear-wide-connected stat-tile-icon"></i>
+            <div class="stat-tile-value">@inProgress</div>
+            <div class="stat-tile-label">@inProgress Progressing</div>
         </div>
     </div>
     <div class="col-md-4">
-        <div class="stat-card">
-            <i class="bi bi-check-circle"></i>
-            <div class="stat-value">@completed</div>
-            <div class="stat-label">3D Models Completed</div>
+        <div class="stat-tile">
+            <i class="bi bi-shield-check stat-tile-icon"></i>
+            <div class="stat-tile-value">@completed</div>
+            <div class="stat-tile-label">@completed Completed</div>
         </div>
     </div>
 </div>
 
-<h2 class="h5 mb-3">Recent Projects</h2>
-@await Html.PartialAsync("_ProjectListTable", Model)
+<h2 class="section-title">Quick Actions</h2>
+<div class="row g-3">
+    <div class="col-md-6 col-xl-3">
+        <a class="qa-card" href="/Projects/Create">
+            <div class="qa-body">
+                <i class="bi bi-plus-circle qa-icon"></i>
+                <div>
+                    <div class="qa-title">Define Vessel, Fluid &amp; Impeller</div>
+                </div>
+            </div>
+            <div class="qa-footer"></div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a class="qa-card" href="/Projects">
+            <div class="qa-body">
+                <i class="bi bi-folder2 qa-icon"></i>
+                <div>
+                    <div class="qa-title">Browse &amp; Edit Designs</div>
+                    <div class="qa-sub">Browse agitator designs.</div>
+                </div>
+            </div>
+            <div class="qa-footer"></div>
+        </a>
+    </div>
+    @if (latest != null)
+    {
+        <div class="col-md-6 col-xl-3">
+            <a class="qa-card" href="/Projects/Results/@latest.Id">
+                <div class="qa-body">
+                    <i class="bi bi-file-earmark-text qa-icon"></i>
+                    <div>
+                        <div class="qa-title">View Latest Results</div>
+                        <div class="qa-sub">(@latest.Name)</div>
+                    </div>
+                </div>
+                <div class="qa-footer"></div>
+            </a>
+        </div>
+    }
+    @if (latestModel != null)
+    {
+        <div class="col-md-6 col-xl-3">
+            <a class="qa-card" href="/Projects/Results/@latestModel.Id#viewer-container">
+                <div class="qa-body">
+                    <i class="bi bi-box qa-icon"></i>
+                    <div>
+                        <div class="qa-title">Explore Latest 3D Model</div>
+                        <div class="qa-sub">(@latestModel.Name)</div>
+                    </div>
+                </div>
+                <div class="qa-footer"></div>
+            </a>
+        </div>
+    }
+</div>
+
+<div class="designs-header">
+    <h2 class="designs-title">Recent Agitator Designs</h2>
+    <a class="designs-link" href="/Projects">View All <i class="bi bi-arrow-right"></i></a>
+</div>
+
+<table class="designs-table">
+    <thead>
+        <tr>
+            <th>Project ID</th>
+            <th>Configuration</th>
+            <th>Calc Summary</th>
+            <th>Status</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var p in recent)
+        {
+            var configuration = string.Empty;
+            if (!string.IsNullOrEmpty(p.ImpellerDisplayName))
+            {
+                configuration = p.ImpellerDisplayName;
+                if (p.VesselVolumeLiters.HasValue)
+                {
+                    configuration += " \u2022 " + Math.Round(p.VesselVolumeLiters.Value).ToString("0", inv) + " L";
+                }
+            }
+
+            var summary = string.Empty;
+            if (p.MotorPowerKw.HasValue)
+            {
+                summary = p.MotorPowerKw.Value.ToString("0.##", inv) + " kW";
+                if (p.RotationalSpeedRpm.HasValue)
+                {
+                    summary += " @ " + p.RotationalSpeedRpm.Value.ToString("0.##", inv);
+                }
+            }
+
+            var statusText = "Not generated";
+            var statusClass = "none";
+            if (p.CadStatus == CadJobStatus.Completed) { statusText = "Ready \u2713"; statusClass = "ready"; }
+            else if (p.CadStatus == CadJobStatus.Queued || p.CadStatus == CadJobStatus.Running) { statusText = "Progressing"; statusClass = "progress"; }
+            else if (p.CadStatus == CadJobStatus.Failed) { statusText = "Failed"; statusClass = "failed"; }
+
+            <tr>
+                <td>@p.Name</td>
+                <td>@configuration</td>
+                <td>@summary</td>
+                <td><span class="status-pill @statusClass">@statusText</span></td>
+                <td>
+                    <a class="btn-mini" href="/Projects/Detail/@p.Id">Open</a>
+                    @if (p.CadStatus == CadJobStatus.Completed)
+                    {
+                        <a class="btn-mini" href="/Projects/Results/@p.Id#viewer-container">3D STEP</a>
+                    }
+                </td>
+            </tr>
+        }
+        @if (!recent.Any())
+        {
+            <tr>
+                <td colspan="5" class="text-muted">No projects yet.</td>
+            </tr>
+        }
+    </tbody>
+</table>
