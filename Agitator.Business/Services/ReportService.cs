@@ -7,7 +7,7 @@ using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 
 
-namespace Agitator.Business
+namespace Agitator.Business.Services
 {
     /// <summary>
     /// Generates an engineering datasheet PDF: design basis, geometry,

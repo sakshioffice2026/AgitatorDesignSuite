@@ -51,5 +51,10 @@ namespace Agitator.Core.Entities
 
         // --- Report tracking ---
         public string? ReportPdfPath { get; set; }
+
+
+        // --- Shaft PINN prediction ---
+        public string? PredictionJson { get; set; }
+        public DateTime? PredictedAt { get; set; }
     }
 }

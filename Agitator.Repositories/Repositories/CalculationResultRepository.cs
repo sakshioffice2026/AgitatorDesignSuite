@@ -57,5 +57,19 @@ namespace Agitator.Repositories.Repositories
             await _db.SaveChangesAsync();
             return (true, null);
         }
+
+        public async Task<(bool success, string? error)> SetPredictionAsync(int projectId, string predictionJson, DateTime predictedAtUtc)
+        {
+            var result = await _db.CalculationResults
+                .FirstOrDefaultAsync(r => r.ProjectId == projectId);
+
+            if (result is null)
+                return (false, $"No calculation result found for project {projectId}.");
+
+            result.PredictionJson = predictionJson;
+            result.PredictedAt = predictedAtUtc;
+            await _db.SaveChangesAsync();
+            return (true, null);
+        }
     }
 }

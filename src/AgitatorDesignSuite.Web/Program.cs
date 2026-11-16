@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using Agitator.Business;
 using Agitator.Business.Contracts;
+using Agitator.Business.Services;
 using Agitator.Core;
 using Agitator.Models.DTOs;
 using Agitator.Repositories;
@@ -38,6 +38,8 @@ builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.Cookies.C
 builder.Services.Configure<CadIntegrationOptions>(builder.Configuration.GetSection("CadIntegration"));
 builder.Services.Configure<ReportGenerationOptions>(builder.Configuration.GetSection("ReportGeneration"));
 
+builder.Services.Configure<ShaftPredictionOptions>(builder.Configuration.GetSection("ShaftPredictionService"));
+
 // --- Repositories / UnitOfWork ---
 builder.Services.AddScoped<IUnitOfWork, UnitOfWorks>();
 builder.Services.AddScoped<IProjectRepository, Agitator.Repositories.Repositories.ProjectRepository>();
@@ -46,6 +48,7 @@ builder.Services.AddScoped<IExceptionHandlerRepository, Agitator.Repositories.Re
 
 // --- Business services ---
 builder.Services.AddScoped<IAgitatorCalculationService, AgitatorCalculationService>();
+builder.Services.AddHttpClient<IShaftPredictionService, ShaftPredictionService>();
 builder.Services.AddScoped<ICadJobService, CadJobService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 

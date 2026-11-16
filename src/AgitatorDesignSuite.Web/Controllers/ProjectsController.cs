@@ -1,4 +1,5 @@
 using Agitator.Business.Contracts;
+using Agitator.Business.Services;
 using Agitator.Core.Entities;
 using Agitator.Models.ViewModel;
 using Agitator.Repositories.Contracts;
@@ -16,19 +17,21 @@ namespace AgitatorDesignSuite.Web.Controllers
         private readonly ICadJobService _cadJobService;
         private readonly IReportService _reportService;
         private readonly ILogger<ProjectsController> _logger;
+        private readonly IShaftPredictionService _shaftPredictionService;
 
         public ProjectsController(
             IUnitOfWork uow,
             IAgitatorCalculationService calculationService,
             ICadJobService cadJobService,
             IReportService reportService,
-            ILogger<ProjectsController> logger)
+            ILogger<ProjectsController> logger, IShaftPredictionService shaftPredictionService)
         {
             _uow = uow;
             _calculationService = calculationService;
             _cadJobService = cadJobService;
             _reportService = reportService;
             _logger = logger;
+            _shaftPredictionService = shaftPredictionService;
         }
 
         // GET: /Projects
@@ -265,6 +268,46 @@ namespace AgitatorDesignSuite.Web.Controllers
                 return RedirectToAction(nameof(Index));
             }
         }
+
+
+        // POST: /Projects/GeneratePrediction/5
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> GeneratePrediction(int id)
+        {
+            try
+            {
+                var project = await _uow.projectRepository.GetProjectDetailAsync(id);
+                if (project?.Vessel is null || project.Impeller is null || project.CalculationResult is null)
+                {
+                    TempData["Error"] = "Project or calculation result not found.";
+                    return RedirectToAction(nameof(Results), new { id });
+                }
+
+                var prediction = await _shaftPredictionService.PredictAsync(
+                    project.Vessel, project.Impeller, project.CalculationResult);
+
+                var json = System.Text.Json.JsonSerializer.Serialize(prediction);
+                var (success, error) = await _uow.calculationResultRepository
+                    .SetPredictionAsync(id, json, prediction.GeneratedAtUtc);
+
+                TempData[success ? "Success" : "Error"] = success ? "Shaft prediction generated." : error;
+                return RedirectToAction(nameof(Results), new { id });
+            }
+            catch (InvalidOperationException ex)
+            {
+                await _uow.exceptionHandlerRepository.SaveException(nameof(ProjectsController), nameof(GeneratePrediction), ex);
+                TempData["Error"] = "The shaft prediction service is not available right now. Please try again later.";
+                return RedirectToAction(nameof(Results), new { id });
+            }
+            catch (Exception ex)
+            {
+                await _uow.exceptionHandlerRepository.SaveException(nameof(ProjectsController), nameof(GeneratePrediction), ex);
+                TempData["Error"] = "Unable to generate shaft prediction.";
+                return RedirectToAction(nameof(Results), new { id });
+            }
+        }
+
 
         // POST: /Projects/RequestCadModel/5
         [HttpPost]

@@ -1,7 +1,7 @@
 ﻿using Agitator.Business.Contracts;
 using Agitator.Core.Entities;
 
-namespace Agitator.Business
+namespace Agitator.Business.Services
 {
     /// <summary>
     /// Core process + mechanical calculation engine.
@@ -82,7 +82,7 @@ namespace Agitator.Business
             double rho = fluid.DensityKgM3;
             double mu = fluid.ViscosityPaS;
 
-            double reynolds = (rho * n * d * d) / mu;
+            double reynolds = rho * n * d * d / mu;
             var regime = ClassifyRegime(reynolds, data);
 
             double turbulentNp = TurbulentPowerNumber(data, vessel);
@@ -96,7 +96,7 @@ namespace Agitator.Business
             double tipSpeed = Math.PI * d * n;
 
             double shaftDiameterM = CalculateShaftDiameterM(vessel, impeller, torqueNm);
-            double motorPowerKw = (powerWatts * MotorServiceFactor / TransmissionEfficiency) / 1000.0;
+            double motorPowerKw = powerWatts * MotorServiceFactor / TransmissionEfficiency / 1000.0;
 
             return new CalculationResult
             {
@@ -216,7 +216,7 @@ namespace Agitator.Business
                 Math.Pow(BendingFactorKm * bendingMoment, 2) +
                 Math.Pow(TorsionFactorKt * designTorque, 2));
 
-            double diameterM = Math.Cbrt((16.0 * equivalentTorque) / (Math.PI * AllowableShearStressPa));
+            double diameterM = Math.Cbrt(16.0 * equivalentTorque / (Math.PI * AllowableShearStressPa));
             return RoundUpToStandardSizeM(diameterM);
         }
 

@@ -1,0 +1,74 @@
+﻿using System.Text.Json.Serialization;
+
+namespace Agitator.Models.DTOs
+{
+    /// <summary>Options bound from appsettings "ShaftPredictionService".</summary>
+    public class ShaftPredictionOptions
+    {
+        public string BaseUrl { get; set; } = "http://127.0.0.1:8001";
+        public int TimeoutSeconds { get; set; } = 10;
+        public int RetryCount { get; set; } = 1;
+
+        /// <summary>Maximum allowed gap (%) between PINN and formula before "not trusted".</summary>
+        public double TolerancePercent { get; set; } = 10.0;
+    }
+
+    /// <summary>Request sent to POST /predict. Units: N*m and metres. Names match the Python service exactly.</summary>
+    public class ShaftPredictionRequest
+    {
+        [JsonPropertyName("ratedTorqueNm")]
+        public double RatedTorqueNm { get; set; }
+
+        [JsonPropertyName("impellerDiameterM")]
+        public double ImpellerDiameterM { get; set; }
+
+        [JsonPropertyName("liquidHeightM")]
+        public double LiquidHeightM { get; set; }
+    }
+
+    /// <summary>Raw response from the Python service. Names match the Python response exactly.</summary>
+    public class ShaftPredictionServiceResponse
+    {
+        [JsonPropertyName("predictedShaftDiameterMm")]
+        public double PredictedShaftDiameterMm { get; set; }
+
+        [JsonPropertyName("rawPredictedDiameterMm")]
+        public double RawPredictedDiameterMm { get; set; }
+
+        [JsonPropertyName("formulaShaftDiameterMm")]
+        public double FormulaShaftDiameterMm { get; set; }
+
+        [JsonPropertyName("gapPercent")]
+        public double GapPercent { get; set; }
+
+        [JsonPropertyName("shearStressMpa")]
+        public double ShearStressMpa { get; set; }
+
+        [JsonPropertyName("allowableShearStressMpa")]
+        public double AllowableShearStressMpa { get; set; }
+
+        [JsonPropertyName("withinTrustedRange")]
+        public bool WithinTrustedRange { get; set; }
+
+        [JsonPropertyName("modelVersion")]
+        public string ModelVersion { get; set; } = string.Empty;
+
+        [JsonPropertyName("notes")]
+        public string Notes { get; set; } = string.Empty;
+    }
+
+    /// <summary>Final result stored as JSON on CalculationResult.PredictionJson and shown in the view.</summary>
+    public class ShaftPredictionResult
+    {
+        public double FormulaShaftDiameterMm { get; set; }
+        public double PredictedShaftDiameterMm { get; set; }
+        public double RawPredictedDiameterMm { get; set; }
+        public double GapPercent { get; set; }
+        public double ShearStressMpa { get; set; }
+        public double AllowableShearStressMpa { get; set; }
+        public bool IsTrusted { get; set; }
+        public string Notes { get; set; } = string.Empty;
+        public string ModelVersion { get; set; } = string.Empty;
+        public DateTime GeneratedAtUtc { get; set; }
+    }
+}

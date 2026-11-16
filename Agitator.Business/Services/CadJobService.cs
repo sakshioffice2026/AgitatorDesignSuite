@@ -3,7 +3,7 @@ using Agitator.Core.Entities;
 using Agitator.Repositories.Contracts;
 
 
-namespace Agitator.Business
+namespace Agitator.Business.Services
 {
     /// <summary>
     /// Web-tier half of the CAD pipeline: just flips the job to "Queued" via

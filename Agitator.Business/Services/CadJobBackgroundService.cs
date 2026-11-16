@@ -9,7 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Agitator.Business
+namespace Agitator.Business.Services
 {
     /// <summary>
     /// Polls MySQL for queued CAD jobs and runs the parametric macro via
@@ -149,7 +149,7 @@ namespace Agitator.Business
                 numberOfImpellers = impeller.NumberOfImpellers,
                 clearanceToDiameterRatio = impeller.ClearanceToDiameterRatio,
                 shaftDiameterMm = job.RecommendedShaftDiameterMm,
-                shaftTotalLengthMm = shaftTotalLengthMm,
+                shaftTotalLengthMm,
                 outputStepPath = Path.Combine(jobDir, "model.step"),
                 outputMeshPath = Path.Combine(jobDir, "preview.obj")
             };
