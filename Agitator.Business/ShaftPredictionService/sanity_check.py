@@ -76,12 +76,13 @@ def main(path):
     # 2. Positive
     results.append(report("Diameter > 0", bool((d > 0).all())))
 
-    # 3. Bounded correction around the formula
+    # 3. Independent prediction must agree with the formula (formula is used only here, to compare)
     rel = ((d - d_formula) / d_formula).abs()
     results.append(report(
-        "Within bounded correction of formula",
+        "Agrees with formula within tolerance",
         bool(rel.max() <= MAX_CORRECTION + 1e-6),
-        f"(max gap {float(rel.max()) * 100:.2f} %, limit {MAX_CORRECTION * 100:.0f} %)",
+        f"(mean gap {float(rel.mean()) * 100:.2f} %, max gap {float(rel.max()) * 100:.2f} %, "
+        f"limit {MAX_CORRECTION * 100:.0f} %)",
     ))
 
     # 4. Stress after rounding up to a standard size

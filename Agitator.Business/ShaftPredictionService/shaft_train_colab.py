@@ -29,15 +29,15 @@ from shaft_model import ShaftPINN, physics_loss, data_loss, torch_raw_diameter_m
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 SEED = 42
 
-EPOCHS = 20000
+EPOCHS = 30000
 LEARNING_RATE = 1e-3
+LEARNING_RATE_END = 1e-5     # learning rate decays smoothly to this value
 N_INTERIOR = 2048            # points resampled every epoch (log-uniform in trusted range)
 HIDDEN = 64
 N_LAYERS = 4
 
 W_DATA = 1.0                 # weight: data term (real measurements)
-W_FORMULA = 1.0              # weight: stay near the formula
-W_PHYSICS = 10.0             # weight: physics penalties
+W_PHYSICS = 1.0              # weight: physics penalties (the formula is NOT used for training)
 
 # Optional real measured data. CSV header:
 # torque_nm,impeller_diameter_m,liquid_height_m,measured_diameter_m
@@ -109,19 +109,18 @@ def main():
     if real_x is not None:
         print(f"Real data points: {real_x.shape[0]}")
     else:
-        print("No real data. Model will stay close to the formula (expected).")
+        print("No real data. Training on physics rules only (formula is not used as a label).")
 
     for epoch in range(start_epoch, EPOCHS):
-        x = sample_inputs(N_INTERIOR, DEVICE)
+        lr = LEARNING_RATE * (LEARNING_RATE_END / LEARNING_RATE) ** (epoch / EPOCHS)
+        for group in optimizer.param_groups:
+            group["lr"] = lr
 
-        # formula anchor: target = formula raw diameter
-        with torch.no_grad():
-            d_formula = torch_raw_diameter_m(x[:, 0:1], x[:, 1:2], x[:, 2:3])
-        l_formula = data_loss(model, x, d_formula)
+        x = sample_inputs(N_INTERIOR, DEVICE)
 
         l_phys, parts = physics_loss(model, x)
 
-        loss = W_FORMULA * l_formula + W_PHYSICS * l_phys
+        loss = W_PHYSICS * l_phys
         if real_x is not None:
             loss = loss + W_DATA * data_loss(model, real_x, real_d)
 
@@ -136,7 +135,7 @@ def main():
 
         if epoch % 500 == 0:
             print(f"[{epoch:>6}/{EPOCHS}] loss={float(loss):.3e} "
-                  f"formula={float(l_formula):.3e} physics={float(l_phys):.3e}")
+                  f"physics={float(l_phys):.3e} lr={lr:.2e}")
 
         if CHECKPOINT_EVERY and epoch > 0 and epoch % CHECKPOINT_EVERY == 0:
             save_checkpoint(model, optimizer, epoch, CHECKPOINT_PATH)
@@ -152,6 +151,15 @@ def main():
     d_formula_mm = formula_shaft_diameter_m(500.0, 0.5, 2.0) * 1000.0
     print(f"Probe (500 N*m, 0.5 m, 2.0 m): PINN raw={d_pred_mm:.2f} mm, "
           f"formula rounded={d_formula_mm:.1f} mm")
+
+    # independent agreement check (evaluation only, never used for training)
+    with torch.no_grad():
+        xe = sample_inputs(5000, DEVICE)
+        d_pred = model(xe)
+        d_ref = torch_raw_diameter_m(xe[:, 0:1], xe[:, 1:2], xe[:, 2:3])
+        gap = ((d_pred - d_ref) / d_ref).abs()
+    print(f"Agreement with formula on 5000 random points: "
+          f"mean gap={float(gap.mean()) * 100:.3f} %, max gap={float(gap.max()) * 100:.3f} %")
 
 
 if __name__ == "__main__":

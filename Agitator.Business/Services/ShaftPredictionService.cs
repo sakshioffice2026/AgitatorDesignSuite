@@ -83,6 +83,7 @@ namespace Agitator.Business.Services
 
             return new ShaftPredictionResult
             {
+                RawFormulaDiameterMm = response.RawFormulaDiameterMm,
                 FormulaShaftDiameterMm = dotNetFormulaMm,
                 PredictedShaftDiameterMm = response.PredictedShaftDiameterMm,
                 RawPredictedDiameterMm = response.RawPredictedDiameterMm,

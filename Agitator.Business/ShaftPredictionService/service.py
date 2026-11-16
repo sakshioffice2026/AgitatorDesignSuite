@@ -62,6 +62,7 @@ class ShaftPredictResponse(BaseModel):
     predictedShaftDiameterMm: float      # PINN, rounded up to standard size
     rawPredictedDiameterMm: float        # PINN, before rounding
     formulaShaftDiameterMm: float        # trusted formula, rounded up to standard size
+    rawFormulaDiameterMm: float          # trusted formula, before rounding
     gapPercent: float                    # (predicted - formula) / formula * 100, on raw values
     shearStressMpa: float                # at predicted standard size
     allowableShearStressMpa: float
@@ -117,6 +118,7 @@ def predict(req: ShaftPredictRequest):
         predictedShaftDiameterMm=round(pred_std_m * 1000.0, 1),
         rawPredictedDiameterMm=round(raw_pred_m * 1000.0, 2),
         formulaShaftDiameterMm=round(raw_formula_m * 1000.0, 1),
+        rawFormulaDiameterMm=round(raw_formula_unrounded_m * 1000.0, 2),
         gapPercent=round(gap_pct, 3),
         shearStressMpa=round(stress_pa / 1e6, 3),
         allowableShearStressMpa=round(ALLOWABLE_SHEAR_STRESS_PA / 1e6, 3),

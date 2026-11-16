@@ -3,11 +3,13 @@ shaft_model.py
 
 Physics-guided neural network for agitator shaft diameter.
 
-The network learns a BOUNDED correction on top of the trusted formula:
+The network predicts the shaft diameter from the three inputs ALONE. The formula is
+NOT used inside the model, so the prediction is an independent second opinion.
 
-    d_pred = d_raw_formula * (1 + MAX_CORRECTION * tanh(net(x)))
-
-so the prediction can never drift more than +/- MAX_CORRECTION from the formula.
+It is trained only on physics rules (see physics_loss):
+    - the shear stress at the predicted diameter must equal the allowable stress
+    - the diameter must grow with torque and liquid height, and fall as impeller grows
+Real measured data can be added later through data_loss.
 
 Inputs  (physical units): rated_torque_nm, impeller_diameter_m, liquid_height_m
 Output  (physical units): raw shaft diameter in metres (before standard-size rounding)
@@ -31,7 +33,11 @@ from shaft_physics import (
     TRUSTED_LIQUID_HEIGHT_M,
 )
 
-MAX_CORRECTION = 0.10  # +/- 10 % around the formula
+MAX_CORRECTION = 0.10  # agreement tolerance (+/- 10 %) used by sanity_check, not inside the model
+
+# Output range of the network (metres). Covers the whole trusted input range.
+D_MIN_M = 0.004
+D_MAX_M = 3.0
 
 
 # ---------------------------------------------------------------------------
@@ -92,19 +98,15 @@ class ShaftPINN(nn.Module):
         layers += [nn.Linear(hidden, 1)]
         self.net = nn.Sequential(*layers)
 
-        # start with zero correction -> prediction == formula
-        nn.init.zeros_(self.net[-1].weight)
-        nn.init.zeros_(self.net[-1].bias)
-
     def forward(self, x):
         """
         x: tensor [N, 3] = (rated_torque_nm, impeller_diameter_m, liquid_height_m)
-        returns: tensor [N, 1] raw shaft diameter in metres
+        returns: tensor [N, 1] raw shaft diameter in metres (no formula used here)
         """
-        torque, imp_d, liq_h = x[:, 0:1], x[:, 1:2], x[:, 2:3]
-        d_formula = torch_raw_diameter_m(torque, imp_d, liq_h)
-        correction = MAX_CORRECTION * torch.tanh(self.net(self.scaler(x)))
-        return d_formula * (1.0 + correction)
+        log_lo = math.log(D_MIN_M)
+        log_hi = math.log(D_MAX_M)
+        log_d = log_lo + (log_hi - log_lo) * torch.sigmoid(self.net(self.scaler(x)))
+        return torch.exp(log_d)
 
 
 # ---------------------------------------------------------------------------
@@ -113,23 +115,27 @@ class ShaftPINN(nn.Module):
 def physics_loss(model: ShaftPINN, x: torch.Tensor):
     """
     Penalties:
-      1. stress     : predicted diameter must keep shear stress <= allowable
+      1. stress     : shear stress at the predicted diameter must EQUAL the allowable
+                      stress (log residual, so too thin and too thick are both penalised)
       2. torque     : d must not decrease when torque increases   (monotonic)
       3. impeller   : d must not decrease when impeller diameter decreases
                       (smaller impeller -> larger tangential force)
       4. height     : d must not decrease when liquid height increases
       5. positive   : d must be > 0
+    Trends are measured in log space (d log d / d log x) so all inputs have the same scale.
     Returns (total, dict of parts).
     """
-    x = x.clone().requires_grad_(True)
-    d = model(x)
+    x = x.clone()
+    log_x = torch.log(x).requires_grad_(True)
+    d = model(torch.exp(log_x))
+    xe = torch.exp(log_x)
 
-    # 1. stress limit
-    stress = torch_shear_stress_pa(x[:, 0:1], x[:, 1:2], x[:, 2:3], d)
-    stress_pen = torch.relu(stress / ALLOWABLE_SHEAR_STRESS_PA - 1.0).pow(2).mean()
+    # 1. stress balance (physics residual)
+    stress = torch_shear_stress_pa(xe[:, 0:1], xe[:, 1:2], xe[:, 2:3], d)
+    stress_pen = torch.log(stress / ALLOWABLE_SHEAR_STRESS_PA).pow(2).mean()
 
-    # 2-4. monotonic trends through autograd
-    grad = torch.autograd.grad(d.sum(), x, create_graph=True)[0]
+    # 2-4. monotonic trends through autograd (log-log slopes)
+    grad = torch.autograd.grad(torch.log(d).sum(), log_x, create_graph=True)[0]
     d_dtorque, d_dimp, d_dheight = grad[:, 0], grad[:, 1], grad[:, 2]
     torque_pen = torch.relu(-d_dtorque).pow(2).mean()
     imp_pen = torch.relu(d_dimp).pow(2).mean()

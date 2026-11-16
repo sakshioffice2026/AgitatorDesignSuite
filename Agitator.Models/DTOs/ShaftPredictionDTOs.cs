@@ -38,6 +38,10 @@ namespace Agitator.Models.DTOs
         [JsonPropertyName("formulaShaftDiameterMm")]
         public double FormulaShaftDiameterMm { get; set; }
 
+
+        [JsonPropertyName("rawFormulaDiameterMm")]
+        public double RawFormulaDiameterMm { get; set; }
+
         [JsonPropertyName("gapPercent")]
         public double GapPercent { get; set; }
 
@@ -60,6 +64,7 @@ namespace Agitator.Models.DTOs
     /// <summary>Final result stored as JSON on CalculationResult.PredictionJson and shown in the view.</summary>
     public class ShaftPredictionResult
     {
+        public double RawFormulaDiameterMm { get; set; }
         public double FormulaShaftDiameterMm { get; set; }
         public double PredictedShaftDiameterMm { get; set; }
         public double RawPredictedDiameterMm { get; set; }
