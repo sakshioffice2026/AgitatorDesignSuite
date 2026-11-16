@@ -1,5 +1,6 @@
 @using Agitator.Core.Entities
 @using Agitator.Models.ViewModel
+@using Agitator.Models.DTOs
 @model ProjectDetailViewModel
 @{
     ViewData["Title"] = "Results";
@@ -38,12 +39,68 @@ else
         </div>
     </div>
 
+    ShaftPredictionResult? pred = null;
+    if (!string.IsNullOrWhiteSpace(r.PredictionJson))
+    {
+        try
+        {
+            pred = System.Text.Json.JsonSerializer.Deserialize<ShaftPredictionResult>(r.PredictionJson);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            pred = null;
+        }
+    }
+
+    <div class="panel mt-3">
+        <h2 class="h6">
+            Shaft Diameter: Formula vs PINN Prediction
+            @if (pred is not null)
+            {
+                if (pred.IsTrusted)
+                {
+                    <span class="badge bg-success ms-2">Trusted</span>
+                }
+                else
+                {
+                    <span class="badge bg-warning text-dark ms-2">Not trusted</span>
+                }
+            }
+        </h2>
+
+        @if (pred is null)
+        {
+            <p class="text-muted mb-0">No prediction generated yet. Click "Generate Shaft Prediction (PINN)" below. The formula result remains the official value.</p>
+        }
+        else
+        {
+            <table class="table table-sm kv mb-2">
+                <tr><th>Formula (official)</th><td>@pred.FormulaShaftDiameterMm.ToString("F1") mm</td></tr>
+                <tr><th>PINN prediction (standard size)</th><td>@pred.PredictedShaftDiameterMm.ToString("F1") mm</td></tr>
+                <tr><th>PINN prediction (before rounding)</th><td>@pred.RawPredictedDiameterMm.ToString("F2") mm</td></tr>
+                <tr><th>Gap to formula</th><td>@pred.GapPercent.ToString("F2") %</td></tr>
+                <tr><th>Shear stress at predicted size</th><td>@pred.ShearStressMpa.ToString("F2") MPa (allowable @pred.AllowableShearStressMpa.ToString("F1") MPa)</td></tr>
+                <tr><th>Model version</th><td>@pred.ModelVersion</td></tr>
+                <tr><th>Generated</th><td>@pred.GeneratedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC</td></tr>
+            </table>
+            @if (!string.IsNullOrWhiteSpace(pred.Notes))
+            {
+                <div class="alert alert-secondary py-2 mb-0" role="note">@pred.Notes</div>
+            }
+        }
+    </div>
+
     <div class="d-flex gap-2 my-3">
         <a class="btn btn-outline-secondary" href="/Projects/DownloadReport/@Model.Id"><i class="bi bi-file-earmark-pdf"></i> Download PDF Datasheet</a>
 
         <form asp-action="RequestCadModel" asp-route-id="@Model.Id" method="post">
             @Html.AntiForgeryToken()
             <button type="submit" class="btn btn-primary"><i class="bi bi-box"></i> Generate 3D Model (FreeCAD)</button>
+        </form>
+
+        <form asp-action="GeneratePrediction" asp-route-id="@Model.Id" method="post">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-outline-primary"><i class="bi bi-cpu"></i> Generate Shaft Prediction (PINN)</button>
         </form>
 
         @if (r.CadStatus == CadJobStatus.Failed)
