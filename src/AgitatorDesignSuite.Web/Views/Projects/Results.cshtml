@@ -5,6 +5,9 @@
     ViewData["Title"] = "Results";
     var r = Model.CalculationResult;
 }
+<script src="~/lib/three/three.min.js"></script>
+<script src="~/lib/three/OrbitControls.js"></script>
+<script src="~/lib/three/OBJLoader.js"></script>
 <h1 class="mb-1">@Model.Name</h1>
 <p class="mb-4" style="color:#64748B;font-size:0.9rem;">Calculated results and mechanical recommendations.</p>
 @if (r is null)
@@ -56,19 +59,33 @@ else
     </div>
 
     <div class="panel">
-        <h2 class="h6">3D Model Status: <span class="badge bg-secondary">@r.CadStatus</span></h2>
+        @{
+            var badgeClass = r.CadStatus switch
+            {
+                CadJobStatus.Completed => "bg-success",
+                CadJobStatus.Failed => "bg-danger",
+                CadJobStatus.Running => "bg-warning text-dark",
+                CadJobStatus.Queued => "bg-primary",
+                _ => "bg-secondary"
+            };
+        }
+        <h2 class="h6">3D Model Status: <span id="cad-badge" class="badge @badgeClass">@r.CadStatus</span></h2>
         @if (r.CadStatus == CadJobStatus.Completed && r.CadPreviewMeshPath != null)
         {
+            <div class="alert alert-success py-2" role="alert"><i class="bi bi-check-circle"></i> 3D model generated successfully.</div>
             <div id="viewer-container" style="width:100%;height:400px;background:#0b0f14;border-radius:6px;"></div>
             <p class="mt-2"><a href="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"><i class="bi bi-download"></i> Download STEP file</a></p>
         }
         else if (r.CadStatus == CadJobStatus.Failed)
         {
-            <p class="text-danger">Model generation failed: @r.CadJobError</p>
+            <div class="alert alert-danger py-2" role="alert"><i class="bi bi-x-circle"></i> 3D model generation failed. @r.CadJobError</div>
         }
         else if (r.CadStatus == CadJobStatus.Queued || r.CadStatus == CadJobStatus.Running)
         {
-            <p>Model generation in progress — this page does not auto-refresh yet; reload to check status.</p>
+            <div id="cad-progress" class="alert alert-info py-2 d-flex align-items-center gap-2" role="status">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <span id="cad-progress-text">Model generation in progress. This page updates automatically.</span>
+            </div>
         }
         else
         {
@@ -78,6 +95,49 @@ else
 }
 
 @section Scripts {
+    @if (r?.CadStatus == CadJobStatus.Queued || r?.CadStatus == CadJobStatus.Running)
+    {
+        <script>
+            (function () {
+                var statusUrl = '@Url.Action("CadStatus", "Projects", new { id = Model.Id })';
+                var badge = document.getElementById('cad-badge');
+                var text = document.getElementById('cad-progress-text');
+                var failures = 0;
+
+                function poll() {
+                    fetch(statusUrl, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+                        .then(function (res) {
+                            if (!res.ok) throw new Error('HTTP ' + res.status);
+                            return res.json();
+                        })
+                        .then(function (data) {
+                            failures = 0;
+                            if (data.status === 'Completed' || data.status === 'Failed') {
+                                window.location.reload();
+                                return;
+                            }
+                            if (badge) badge.textContent = data.status;
+                            if (text) {
+                                text.textContent = data.status === 'Running'
+                                    ? 'Generating 3D model in FreeCAD...'
+                                    : 'Waiting in queue...';
+                            }
+                            setTimeout(poll, 3000);
+                        })
+                        .catch(function () {
+                            failures++;
+                            if (failures >= 5) {
+                                if (text) text.textContent = 'Unable to check status. Please reload the page.';
+                                return;
+                            }
+                            setTimeout(poll, 5000);
+                        });
+                }
+
+                setTimeout(poll, 2000);
+            })();
+        </script>
+    }
     @if (r?.CadStatus == CadJobStatus.Completed && r.CadPreviewMeshPath != null)
     {
         <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/OBJLoader.js"></script>
@@ -100,15 +160,32 @@ else
                 dirLight.position.set(1, 1, 1);
                 scene.add(dirLight);
 
+
+                            console.log("THREE:", THREE);
+            console.log("OrbitControls:", THREE.OrbitControls);
+            console.log("OBJLoader:", THREE.OBJLoader);
+
                 var controls = new THREE.OrbitControls(camera, renderer.domElement);
 
                 var loader = new THREE.OBJLoader();
                 loader.load('@Url.Action("PreviewMesh", "Projects", new { id = Model.Id })', function (obj) {
                     obj.traverse(function (child) {
                         if (child.isMesh) {
-                            child.material = new THREE.MeshStandardMaterial({ color: 0x4a90d9 });
+                            var isTank = child.name.indexOf('TankShell') === 0;
+                            var isShaftOrImpeller = child.name.indexOf('Shaft') === 0 || child.name.indexOf('Impeller') === 0;
+                            child.material = new THREE.MeshStandardMaterial({
+                                color: isTank ? 0x9fb4c7 : (isShaftOrImpeller ? 0xe0a030 : 0x4a90d9),
+                                transparent: isTank,
+                                opacity: isTank ? 0.2 : 1.0,
+                                depthWrite: !isTank,
+                                side: THREE.DoubleSide
+                            });
+                            if (isTank) child.renderOrder = 10;
                         }
                     });
+
+                    obj.rotation.x = -Math.PI / 2;
+                    obj.updateMatrixWorld(true);
 
                     var box = new THREE.Box3().setFromObject(obj);
                     var center = box.getCenter(new THREE.Vector3());

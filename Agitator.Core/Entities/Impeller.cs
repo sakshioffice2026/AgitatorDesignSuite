@@ -6,18 +6,19 @@ namespace Agitator.Core.Entities
     /// <summary>
     /// Impeller types with published power-number correlations.
     /// Kp = laminar power constant, Ct = turbulent (fully baffled) power number.
-    /// Values are representative textbook figures (Oldshue; Paul, Atiemo-Obeng &
+    /// Values are representative textbook figures (Oldshue; Paul, Atiemo-Obeng &amp;
     /// Kresta, "Handbook of Industrial Mixing") — replace with your own validated
     /// correlations/curve data before relying on this for real equipment sizing.
+    /// The values actually used live in AgitatorCalculationService.
     /// </summary>
     public enum ImpellerType
     {
-        RushtonTurbine,      // Kp=71,  Ct=5.0
-        PitchedBladeTurbine, // Kp=70,  Ct=1.27 (4-blade, 45°)
-        Propeller,           // Kp=41,  Ct=0.32
-        HydrofoilA310,       // Kp=65,  Ct=0.30
-        AnchorFoil,          // Kp=420, Ct=0.35 (no baffles, close-clearance)
-        HelicalRibbon        // Kp=980, Ct=0.20 (no baffles, close-clearance)
+        RushtonTurbine,      // Kp=70,  Ct=5.00 (6-blade disc turbine, baffled)
+        PitchedBladeTurbine, // Kp=70,  Ct=1.27 (4-blade, 45°, baffled)
+        Propeller,           // Kp=41,  Ct=0.32 (square pitch, baffled)
+        HydrofoilA310,       // Kp=65,  Ct=0.30 (baffled)
+        AnchorFoil,          // Kp=300, Ct=0.35 (close-clearance, unbaffled, laminar to Re~100)
+        HelicalRibbon        // Kp=300, Ct=0.35 (close-clearance, unbaffled, laminar to Re~100)
     }
 
     public class Impeller
@@ -39,7 +40,10 @@ namespace Agitator.Core.Entities
         [Range(1, 5)]
         public int NumberOfImpellers { get; set; } = 1;
 
-        /// <summary>Off-bottom clearance as a fraction of vessel diameter, typically ~1/3.</summary>
+        /// <summary>
+        /// Off-bottom clearance as a fraction of vessel diameter, typically ~1/3.
+        /// Used to estimate impeller spacing for multi-impeller power.
+        /// </summary>
         [Range(0, 2)]
         public double ClearanceToDiameterRatio { get; set; } = 0.33;
     }

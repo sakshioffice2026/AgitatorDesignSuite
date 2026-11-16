@@ -116,56 +116,67 @@ class AgitatorParams:
 # ----------------------------------------------------------------------
 # 2. TANK / HEAD GEOMETRY
 # ----------------------------------------------------------------------
-def build_torispherical_head_profile(od_mm, wall_mm):
+def _torispherical_geometry(od_mm):
+    """
+    Standard torispherical (F&D) head: crown radius = OD, knuckle radius
+    = 6% of OD. Returns the shared arc centres used by both the outer and
+    inner (offset) profiles so the head wall has uniform thickness.
+    """
     R = od_mm / 2.0
-    L = od_mm
-    r = 0.06 * od_mm
+    crown_r = od_mm
+    knuckle_r = 0.06 * od_mm
+    knuckle_cx = R - knuckle_r
+    crown_cz = -math.sqrt(
+        max((crown_r - knuckle_r) ** 2 - knuckle_cx ** 2, 0.0)
+    )
+    return R, crown_r, knuckle_r, knuckle_cx, crown_cz
 
-    def profile_points(radius_outer):
-        L_eff = L - r
-        knuckle_center_r = radius_outer - r
-        theta = (
-            math.asin(knuckle_center_r / L_eff)
-            if L_eff > 0 else 0
-        )
 
+def head_height_mm(prm):
+    """Outer height of one head above (or below) the shell end plane."""
+    if prm.head_type.lower() == "flat":
+        return prm.wall_thickness_mm
+    _, crown_r, _, _, crown_cz = _torispherical_geometry(prm.tank_od_mm)
+    return crown_cz + crown_r
+
+
+def build_torispherical_head_profile(od_mm, wall_mm):
+    R, crown_r, knuckle_r, kx, cz = _torispherical_geometry(od_mm)
+
+    phi = math.atan2(-cz, kx)       # knuckle arc sweep (from horizontal)
+    b_tangent = math.pi / 2.0 - phi  # crown arc start (from vertical)
+
+    def profile_points(offset):
+        rk = knuckle_r - offset
+        rc = crown_r - offset
+        steps = 24
         pts = []
-        steps = 20
 
+        # Knuckle arc: from the shell edge (R - offset, 0) up to tangent.
         for i in range(steps + 1):
-            a = (
-                (math.pi / 2.0)
-                * (i / steps)
-                * (theta / (math.pi / 2.0))
-                if theta > 0 else 0
-            )
-            ang = math.pi / 2.0 - a
+            a = phi * (i / steps)
             pts.append(
                 App.Vector(
-                    knuckle_center_r - r + r * math.cos(ang),
+                    kx + rk * math.cos(a),
                     0,
-                    r * math.sin(ang)
+                    rk * math.sin(a)
                 )
             )
 
-        z0 = pts[-1].z
-        x0 = pts[-1].x
-        crown_r = L_eff if L_eff > 0 else radius_outer
-        cz = z0 - math.sqrt(
-            max(crown_r * crown_r - x0 * x0, 0.0)
-        )
-
+        # Crown arc: from tangent point to the apex on the axis.
         for i in range(1, steps + 1):
-            frac = i / steps
-            xx = x0 * (1 - frac)
-            zz = cz + math.sqrt(
-                max(crown_r * crown_r - xx * xx, 0.0)
+            b = b_tangent * (1.0 - i / steps)
+            pts.append(
+                App.Vector(
+                    rc * math.sin(b),
+                    0,
+                    cz + rc * math.cos(b)
+                )
             )
-            pts.append(App.Vector(xx, 0, zz))
 
         return pts
 
-    return profile_points(R), profile_points(R - wall_mm)
+    return profile_points(0.0), profile_points(wall_mm)
 
 
 def build_head_solid(od_mm, wall_mm, upward=True):
@@ -292,7 +303,7 @@ def build_tank(doc, prm):
 def build_top_flange(doc, prm):
     z_base = (
         prm.shell_height_mm
-        + prm.tank_od_mm * 0.06 * 1.2
+        + head_height_mm(prm)
     )
 
     nozzle = Part.makeCylinder(
@@ -352,21 +363,27 @@ def build_top_flange(doc, prm):
 # ----------------------------------------------------------------------
 # 3. SHAFT
 # ----------------------------------------------------------------------
+def shaft_top_z_mm(prm):
+    """Shaft top sits at the top face of the mounting flange."""
+    return (
+        prm.shell_height_mm
+        + head_height_mm(prm)
+        + prm.flange_nozzle_height_mm
+        + prm.flange_thickness_mm
+    )
+
+
 def build_shaft(doc, prm):
+    top_z = shaft_top_z_mm(prm)
+    lowest_impeller_z = prm.tank_od_mm * prm.impeller_clearance_ratio
+    bottom_z = min(top_z - prm.shaft_length_mm, lowest_impeller_z)
+
     shaft = Part.makeCylinder(
         prm.shaft_diameter_mm / 2.0,
-        prm.shaft_length_mm
+        top_z - bottom_z
     )
     shaft.translate(
-        App.Vector(0, 0, -prm.shaft_length_mm)
-    )
-    shaft.translate(
-        App.Vector(
-            0,
-            0,
-            prm.shell_height_mm
-            + prm.flange_nozzle_height_mm
-        )
+        App.Vector(0, 0, bottom_z)
     )
 
     obj = doc.addObject("Part::Feature", "Shaft")
@@ -1286,9 +1303,7 @@ def build_impellers(doc, prm):
 
     for i in range(prm.number_of_impellers):
         z = (
-            shaft_top_z
-            - prm.shaft_length_mm
-            + clearance_mm
+            clearance_mm
             + i * prm.impeller_spacing_mm
         )
 
@@ -1608,11 +1623,20 @@ def main():
 
     # STEP
     try:
-        all_shapes = [
-            obj.Shape
-            for obj in doc.Objects
-            if hasattr(obj, "Shape")
-        ]
+        final_objs = (
+            [tank_obj, flange_obj, shaft_obj]
+            + list(impeller_objs)
+            + list(baffle_objs)
+        )
+
+        all_shapes = []
+        for obj in final_objs:
+            if obj is None or not hasattr(obj, "Shape"):
+                continue
+            shp = obj.Shape
+            if shp.isNull() or not shp.isValid() or shp.Volume <= 0:
+                continue
+            all_shapes.append(shp.copy())
 
         compound = Part.makeCompound(
             all_shapes
@@ -1637,21 +1661,32 @@ def main():
     # OBJ preview
     if prm.output_mesh_path:
         try:
-            import Mesh
+            vertex_offset = 0
 
-            combined_mesh = Mesh.Mesh()
+            with open(prm.output_mesh_path, "w") as obj_file:
+                for obj in final_objs:
+                    if obj is None or not hasattr(obj, "Shape"):
+                        continue
+                    shp = obj.Shape
+                    if shp.isNull():
+                        continue
 
-            for obj in doc.Objects:
-                if hasattr(obj, "Shape"):
-                    mesh = Mesh.Mesh()
-                    mesh.addFacets(
-                        obj.Shape.tessellate(1.0)
-                    )
-                    combined_mesh.addMesh(mesh)
+                    verts, facets = shp.tessellate(1.0)
+                    obj_file.write(f"o {obj.Name}\n")
 
-            combined_mesh.write(
-                prm.output_mesh_path
-            )
+                    for v in verts:
+                        obj_file.write(
+                            f"v {v.x:.4f} {v.y:.4f} {v.z:.4f}\n"
+                        )
+
+                    for tri in facets:
+                        obj_file.write(
+                            f"f {tri[0] + vertex_offset + 1} "
+                            f"{tri[1] + vertex_offset + 1} "
+                            f"{tri[2] + vertex_offset + 1}\n"
+                        )
+
+                    vertex_offset += len(verts)
 
             print(
                 f"Mesh exported to "

@@ -90,8 +90,8 @@ namespace Agitator.Business
             {
                 var (stepPath, meshPath) = await RunFreeCadAsync(job, ct);
                 job.CadStatus = CadJobStatus.Completed;
-                job.CadStepFilePath = stepPath;
-                job.CadPreviewMeshPath = meshPath;
+                job.CadStepFilePath = File.Exists(stepPath) ? stepPath : null;
+                job.CadPreviewMeshPath = File.Exists(meshPath) ? meshPath : null;
             }
             catch (Exception ex)
             {

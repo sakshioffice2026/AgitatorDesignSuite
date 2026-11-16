@@ -275,7 +275,7 @@ namespace AgitatorDesignSuite.Web.Controllers
             {
                 var (success, error) = await _cadJobService.EnqueueAsync(id);
                 TempData[success ? "Success" : "Error"] = success
-                    ? "3D model generation has been queued. Refresh in a few moments."
+                    ? "3D model generation has been queued. Status will update automatically."
                     : error;
                 return RedirectToAction(nameof(Results), new { id });
             }
@@ -337,6 +337,34 @@ namespace AgitatorDesignSuite.Web.Controllers
                 await _uow.exceptionHandlerRepository.SaveException(nameof(ProjectsController), nameof(DownloadCadStep), ex);
                 TempData["Error"] = "Unable to download STEP file.";
                 return RedirectToAction(nameof(Results), new { id });
+            }
+        }
+
+        // GET: /Projects/CadStatus/5
+        // Lightweight JSON status endpoint polled by the Results page so the
+        // UI can show Queued / Running / Completed / Failed without a reload.
+        [HttpGet]
+        public async Task<IActionResult> CadStatus(int id)
+        {
+            try
+            {
+                var project = await _uow.projectRepository.GetProjectDetailAsync(id);
+                var result = project?.CalculationResult;
+                if (result is null)
+                    return NotFound(new { status = "NotFound", message = "No calculation result found." });
+
+                return Json(new
+                {
+                    status = result.CadStatus.ToString(),
+                    error = result.CadJobError,
+                    hasStep = !string.IsNullOrEmpty(result.CadStepFilePath),
+                    hasPreview = !string.IsNullOrEmpty(result.CadPreviewMeshPath)
+                });
+            }
+            catch (Exception ex)
+            {
+                await _uow.exceptionHandlerRepository.SaveException(nameof(ProjectsController), nameof(CadStatus), ex);
+                return StatusCode(500, new { status = "Error", message = "Unable to read model status." });
             }
         }
 
