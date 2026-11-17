@@ -29,20 +29,27 @@ namespace Agitator.Business.Services
         }
 
         public async Task<ShaftPredictionResult> PredictAsync(
-            Vessel vessel,
-            Impeller impeller,
-            CalculationResult calculation,
-            CancellationToken cancellationToken = default)
+    Vessel vessel,
+    Impeller impeller,
+    FluidProperties fluid,
+    CalculationResult calculation,
+    CancellationToken cancellationToken = default)
         {
-            if (vessel is null) throw new ArgumentNullException(nameof(vessel));
             if (impeller is null) throw new ArgumentNullException(nameof(impeller));
+            if (fluid is null) throw new ArgumentNullException(nameof(fluid));
             if (calculation is null) throw new ArgumentNullException(nameof(calculation));
+
+            double allowableShearPa = AgitatorCalculationService.ComputeAllowableShearStressPa(
+                impeller.ShaftMaterial, fluid.OperatingTemperatureC);
 
             var request = new ShaftPredictionRequest
             {
                 RatedTorqueNm = calculation.TorqueNm,
                 ImpellerDiameterM = impeller.DiameterM,
-                LiquidHeightM = vessel.LiquidHeightM
+                LiquidHeightM = vessel.LiquidHeightM,
+                AllowableShearStressMpa = allowableShearPa / 1_000_000.0,
+                OperatingTemperatureC = fluid.OperatingTemperatureC,
+                ShaftMaterialName = impeller.ShaftMaterial?.DisplayName ?? string.Empty
             };
 
             var response = await CallServiceAsync(request, cancellationToken);
@@ -93,7 +100,14 @@ namespace Agitator.Business.Services
                 IsTrusted = isTrusted,
                 Notes = string.Join(" ", notes),
                 ModelVersion = response.ModelVersion,
-                GeneratedAtUtc = DateTime.UtcNow
+                GeneratedAtUtc = DateTime.UtcNow,
+                ShaftMaterialName = impeller.ShaftMaterial?.Grade ?? string.Empty,
+                HeatTreatment = impeller.ShaftMaterial?.HeatTreatment ?? string.Empty,
+                OperatingTemperatureC = fluid.OperatingTemperatureC,
+                YieldStrengthAtTempMpa = impeller.ShaftMaterial is null
+                    ? 0
+                    : Math.Round(AgitatorCalculationService.ComputeYieldAtTemperatureMpa(
+                        impeller.ShaftMaterial, fluid.OperatingTemperatureC), 1)
             };
         }
 

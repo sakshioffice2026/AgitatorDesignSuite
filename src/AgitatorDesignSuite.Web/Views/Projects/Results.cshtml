@@ -1,6 +1,7 @@
 @using Agitator.Core.Entities
 @using Agitator.Models.ViewModel
 @using Agitator.Models.DTOs
+@using Agitator.Business.Services
 @model ProjectDetailViewModel
 @{
     ViewData["Title"] = "Results";
@@ -34,6 +35,22 @@ else
                 <table class="table table-sm kv mb-0">
                     <tr><th>Shaft diameter</th><td>@r.RecommendedShaftDiameterMm.ToString("F1") mm</td></tr>
                     <tr><th>Motor rating</th><td>@r.RecommendedMotorPowerKw.ToString("F2") kW</td></tr>
+                </table>
+                @{
+                    var shaftMat = Model.Impeller?.ShaftMaterial;
+                    var opTemp = Model.FluidProperties?.OperatingTemperatureC ?? 30;
+                    var allowableMpa = AgitatorCalculationService.ComputeAllowableShearStressPa(shaftMat, opTemp) / 1_000_000.0;
+                }
+                <h3 class="h6 mt-3">Shaft Design Basis</h3>
+                <table class="table table-sm kv mb-0">
+                    <tr><th>Shaft material</th><td>@(shaftMat?.Grade ?? "Not specified")</td></tr>
+                    <tr><th>Heat treatment</th><td>@(shaftMat?.HeatTreatment ?? "Not specified")</td></tr>
+                    <tr><th>Operating temperature</th><td>@opTemp.ToString("F1") °C</td></tr>
+                    @if (shaftMat is not null)
+                    {
+                        <tr><th>Yield strength at temperature</th><td>@AgitatorCalculationService.ComputeYieldAtTemperatureMpa(shaftMat, opTemp).ToString("F1") MPa</td></tr>
+                    }
+                    <tr><th>Allowable shear stress</th><td>@allowableMpa.ToString("F1") MPa</td></tr>
                 </table>
             </div>
         </div>

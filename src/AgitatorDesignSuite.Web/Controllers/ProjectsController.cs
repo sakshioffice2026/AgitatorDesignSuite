@@ -84,14 +84,14 @@ namespace AgitatorDesignSuite.Web.Controllers
 
         // GET: /Projects/Create
         [HttpGet]
-        public IActionResult Create()
+        public async Task<IActionResult> Create()
         {
             SetBreadcrumb(
                 new BreadcrumbItem { Text = "Dashboard", Url = Url.Action("Index", "Home") },
                 new BreadcrumbItem { Text = "Projects", Url = Url.Action("Index") },
                 new BreadcrumbItem { Text = "New Project", IsActive = true });
 
-            return View(new ProjectFormViewModel());
+            return await ViewFormAsync(new ProjectFormViewModel());
         }
 
         // POST: /Projects/Create
@@ -103,7 +103,7 @@ namespace AgitatorDesignSuite.Web.Controllers
         public async Task<IActionResult> Create(ProjectFormViewModel vm)
         {
             if (!ModelState.IsValid)
-                return View(vm);
+                return await ViewFormAsync(vm);
 
             try
             {
@@ -114,7 +114,7 @@ namespace AgitatorDesignSuite.Web.Controllers
                 if (!success)
                 {
                     TempData["Error"] = error ?? "Unable to create project.";
-                    return View(vm);
+                    return await ViewFormAsync(vm);
                 }
 
                 var project = await _uow.projectRepository.GetProjectDetailAsync(projectId);
@@ -130,7 +130,7 @@ namespace AgitatorDesignSuite.Web.Controllers
             {
                 await _uow.exceptionHandlerRepository.SaveException(nameof(ProjectsController), nameof(Create), ex);
                 TempData["Error"] = "Something went wrong while creating the project.";
-                return View(vm);
+                return await ViewFormAsync(vm);
             }
         }
 
@@ -159,7 +159,7 @@ namespace AgitatorDesignSuite.Web.Controllers
                     new BreadcrumbItem { Text = "Projects", Url = Url.Action("Index") },
                     new BreadcrumbItem { Text = $"Edit {project.Name}", IsActive = true });
 
-                return View(MapToFormViewModel(project));
+                return await ViewFormAsync(MapToFormViewModel(project));
             }
             catch (Exception ex)
             {
@@ -175,7 +175,7 @@ namespace AgitatorDesignSuite.Web.Controllers
         public async Task<IActionResult> Edit(int id, ProjectFormViewModel vm)
         {
             if (!ModelState.IsValid)
-                return View(vm);
+                return await ViewFormAsync(vm);
 
             try
             {
@@ -185,7 +185,7 @@ namespace AgitatorDesignSuite.Web.Controllers
                 if (!success)
                 {
                     TempData["Error"] = error ?? "Unable to update project.";
-                    return View(vm);
+                    return await ViewFormAsync(vm);
                 }
 
                 // Recalculate since geometry/fluid inputs may have changed.
@@ -199,7 +199,7 @@ namespace AgitatorDesignSuite.Web.Controllers
             {
                 await _uow.exceptionHandlerRepository.SaveException(nameof(ProjectsController), nameof(Edit), ex);
                 TempData["Error"] = "Something went wrong while updating the project.";
-                return View(vm);
+                return await ViewFormAsync(vm);
             }
         }
 
@@ -278,14 +278,15 @@ namespace AgitatorDesignSuite.Web.Controllers
             try
             {
                 var project = await _uow.projectRepository.GetProjectDetailAsync(id);
-                if (project?.Vessel is null || project.Impeller is null || project.CalculationResult is null)
+                if (project?.Vessel is null || project.Impeller is null ||
+     project.FluidProperties is null || project.CalculationResult is null)
                 {
                     TempData["Error"] = "Project or calculation result not found.";
                     return RedirectToAction(nameof(Results), new { id });
                 }
 
                 var prediction = await _shaftPredictionService.PredictAsync(
-                    project.Vessel, project.Impeller, project.CalculationResult);
+    project.Vessel, project.Impeller, project.FluidProperties, project.CalculationResult);
 
                 var json = System.Text.Json.JsonSerializer.Serialize(prediction);
                 var (success, error) = await _uow.calculationResultRepository
@@ -458,8 +459,17 @@ namespace AgitatorDesignSuite.Web.Controllers
                 RotationalSpeedRpm = project.Impeller?.RotationalSpeedRpm ?? 90,
                 NumberOfImpellers = project.Impeller?.NumberOfImpellers ?? 1,
                 DensityKgM3 = project.FluidProperties?.DensityKgM3 ?? 1000,
-                ViscosityPaS = project.FluidProperties?.ViscosityPaS ?? 0.001
+                ViscosityPaS = project.FluidProperties?.ViscosityPaS ?? 0.001,
+                OperatingTemperatureC = project.FluidProperties?.OperatingTemperatureC ?? 30,
+                ShaftMaterialId = project.Impeller?.ShaftMaterialId
             };
         }
+
+        private async Task<IActionResult> ViewFormAsync(ProjectFormViewModel vm)
+        {
+            vm.ShaftMaterialOptions = await _uow.shaftMaterialRepository.GetAllActiveAsync();
+            return View(vm);
+        }
     }
+    
 }

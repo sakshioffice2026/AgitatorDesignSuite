@@ -79,6 +79,8 @@ namespace Agitator.Business.Services
                             AddRow(table, "Diameter", $"{impeller.DiameterM:F3} m");
                             AddRow(table, "Speed", $"{impeller.RotationalSpeedRpm:F0} RPM");
                             AddRow(table, "Quantity", impeller.NumberOfImpellers.ToString());
+                            AddRow(table, "Shaft material", impeller.ShaftMaterial?.Grade ?? "Not specified");
+                            AddRow(table, "Shaft heat treatment", impeller.ShaftMaterial?.HeatTreatment ?? "Not specified");
                         });
 
                         col.Item().Text("Fluid Properties").Bold().FontSize(12);
@@ -88,6 +90,7 @@ namespace Agitator.Business.Services
                             AddRow(table, "Density", $"{fluid.DensityKgM3:F1} kg/m3");
                             AddRow(table, "Viscosity", $"{fluid.ViscosityPaS:F4} Pa.s");
                             AddRow(table, "Behavior", fluid.IsNewtonian ? "Newtonian" : "Non-Newtonian");
+                            AddRow(table, "Operating temperature", $"{fluid.OperatingTemperatureC:F1} °C");
                         });
 
                         col.Item().Text("Calculated Results").Bold().FontSize(12);
@@ -100,6 +103,13 @@ namespace Agitator.Business.Services
                             AddRow(table, "Torque", $"{result.TorqueNm:F2} N.m");
                             AddRow(table, "Impeller tip speed", $"{result.TipSpeedMPerS:F2} m/s");
                             AddRow(table, "Recommended shaft diameter", $"{result.RecommendedShaftDiameterMm:F1} mm");
+                            if (impeller.ShaftMaterial is not null)
+                            {
+                                AddRow(table, "Shaft yield strength at temperature",
+                                    $"{AgitatorCalculationService.ComputeYieldAtTemperatureMpa(impeller.ShaftMaterial, fluid.OperatingTemperatureC):F1} MPa");
+                            }
+                            AddRow(table, "Allowable shear stress",
+                                $"{AgitatorCalculationService.ComputeAllowableShearStressPa(impeller.ShaftMaterial, fluid.OperatingTemperatureC) / 1_000_000.0:F1} MPa");
                             AddRow(table, "Recommended motor rating", $"{result.RecommendedMotorPowerKw:F2} kW");
                         });
 

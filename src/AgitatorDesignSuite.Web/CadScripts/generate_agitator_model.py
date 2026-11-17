@@ -103,6 +103,8 @@ class AgitatorParams:
         self.project_name = p.get("projectName", "Untitled Project")
         self.part_name = p.get("partName", "Agitator Assembly")
         self.material = p.get("material", "SS316L")
+        self.heat_treatment = p.get("heatTreatment", "")
+        self.operating_temperature_c = p.get("operatingTemperatureC")
         self.drawing_scale = p.get("drawingScale", "1:20")
 
         # Outputs
@@ -1415,7 +1417,8 @@ def build_techdraw(doc, prm, source_objs):
             "Comment", prm.project_name
         )
         template.setEditFieldContent(
-            "FC-MATERIAL", prm.material
+                       "FC-MATERIAL",
+            f"{prm.material} ({prm.heat_treatment})" if prm.heat_treatment else prm.material
         )
     except Exception as ex:
         print(

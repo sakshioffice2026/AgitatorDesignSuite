@@ -12,12 +12,15 @@ namespace Agitator.Repositories
         public ICalculationResultRepository calculationResultRepository { get; }
         public IExceptionHandlerRepository exceptionHandlerRepository { get; }
 
+        public IShaftMaterialRepository shaftMaterialRepository { get; }
+
         public UnitOfWorks(ApplicationDbContext db)
         {
             _db = db;
             projectRepository = new ProjectRepository(_db);
             calculationResultRepository = new CalculationResultRepository(_db);
             exceptionHandlerRepository = new ExceptionHandlerRepository(_db);
+            shaftMaterialRepository = new ShaftMaterialRepository(_db);
         }
 
         public async Task<int> Commit()

@@ -18,6 +18,8 @@ namespace Agitator.Core
         public DbSet<FluidProperties> FluidProperties => Set<FluidProperties>();
         public DbSet<CalculationResult> CalculationResults => Set<CalculationResult>();
         public DbSet<ExceptionHandler> ExceptionHandlers => Set<ExceptionHandler>();
+        public DbSet<ShaftMaterial> ShaftMaterials => Set<ShaftMaterial>();
+        public DbSet<ShaftMaterialTempDerating> ShaftMaterialTempDeratings => Set<ShaftMaterialTempDerating>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -73,6 +75,31 @@ namespace Agitator.Core
             modelBuilder.Entity<ExceptionHandler>(entity =>
             {
                 entity.ToTable("exceptionhandler");
+
+                modelBuilder.Entity<ShaftMaterial>(entity =>
+                {
+                    entity.ToTable("ShaftMaterials");
+
+                    entity.HasIndex(m => new { m.Grade, m.HeatTreatment }).IsUnique();
+
+                    entity.HasMany(m => m.TempDeratingPoints)
+                          .WithOne(d => d.ShaftMaterial!)
+                          .HasForeignKey(d => d.ShaftMaterialId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                });
+
+                modelBuilder.Entity<ShaftMaterialTempDerating>(entity =>
+                {
+                    entity.ToTable("ShaftMaterialTempDerating");
+
+                    entity.HasIndex(d => new { d.ShaftMaterialId, d.TemperatureC }).IsUnique();
+                });
+
+                modelBuilder.Entity<Impeller>()
+                    .HasOne(i => i.ShaftMaterial)
+                    .WithMany()
+                    .HasForeignKey(i => i.ShaftMaterialId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
         }
     }

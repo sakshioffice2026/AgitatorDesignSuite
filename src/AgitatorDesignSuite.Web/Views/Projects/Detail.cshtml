@@ -35,6 +35,9 @@
                 <tr><th>Type</th><td>@Model.Impeller?.Type</td></tr>
                 <tr><th>Diameter</th><td>@Model.Impeller?.DiameterM.ToString("F3") m</td></tr>
                 <tr><th>Speed</th><td>@Model.Impeller?.RotationalSpeedRpm.ToString("F0") RPM</td></tr>
+                <tr><th>Shaft material</th><td>@(Model.Impeller?.ShaftMaterial?.Grade ?? "Not specified")</td></tr>
+                <tr><th>Heat treatment</th><td>@(Model.Impeller?.ShaftMaterial?.HeatTreatment ?? "Not specified")</td></tr>
+                <tr><th>Operating temperature</th><td>@(Model.FluidProperties?.OperatingTemperatureC.ToString("F1") ?? "-") °C</td></tr>
             </table>
         </div>
     </div>

@@ -36,6 +36,12 @@ namespace Agitator.Business.Services
         // Shaft material allowable shear stress (mild carbon steel, conservative).
         private const double AllowableShearStressPa = 40_000_000;
 
+        
+        // Allowable shear = min(0.30 x Sy, 0.18 x Su) at temperature, x keyway reduction.
+        private const double ShearFractionOfYield = 0.30;
+        private const double ShearFractionOfUltimate = 0.18;
+        private const double KeywayReductionFactor = 0.75;
+
         // ASME-style shock/fatigue factors for rotating shaft.
         private const double BendingFactorKm = 1.5;
         private const double TorsionFactorKt = 1.0;
@@ -76,6 +82,13 @@ namespace Agitator.Business.Services
                 throw new ArgumentOutOfRangeException(nameof(fluid), "Density must be greater than zero.");
             if (fluid.ViscosityPaS <= 0)
                 throw new ArgumentOutOfRangeException(nameof(fluid), "Viscosity must be greater than zero.");
+            if (impeller.ShaftMaterial is not null &&
+    ((decimal)fluid.OperatingTemperatureC < impeller.ShaftMaterial.MinOperatingTempC ||
+     (decimal)fluid.OperatingTemperatureC > impeller.ShaftMaterial.MaxOperatingTempC))
+                throw new ArgumentOutOfRangeException(nameof(fluid),
+                    $"Operating temperature {fluid.OperatingTemperatureC} °C is outside the valid range " +
+                    $"({impeller.ShaftMaterial.MinOperatingTempC} to {impeller.ShaftMaterial.MaxOperatingTempC} °C) " +
+                    $"for {impeller.ShaftMaterial.DisplayName}.");
 
             double n = impeller.RotationalSpeedRpm / 60.0; // rev/s
             double d = impeller.DiameterM;
@@ -95,7 +108,8 @@ namespace Agitator.Business.Services
             double torqueNm = powerWatts / (2 * Math.PI * n);
             double tipSpeed = Math.PI * d * n;
 
-            double shaftDiameterM = CalculateShaftDiameterM(vessel, impeller, torqueNm);
+            double allowableShearPa = ComputeAllowableShearStressPa(impeller.ShaftMaterial, fluid.OperatingTemperatureC);
+            double shaftDiameterM = CalculateShaftDiameterM(vessel, impeller, torqueNm, allowableShearPa);
             double motorPowerKw = powerWatts * MotorServiceFactor / TransmissionEfficiency / 1000.0;
 
             return new CalculationResult
@@ -201,7 +215,7 @@ namespace Agitator.Business.Services
         /// M = bending moment from hydraulic radial force over shaft length.
         /// Result is rounded up to the next standard shaft size.
         /// </summary>
-        private static double CalculateShaftDiameterM(Vessel vessel, Impeller impeller, double ratedTorqueNm)
+        private static double CalculateShaftDiameterM(Vessel vessel, Impeller impeller, double ratedTorqueNm, double allowableShearPa)
         {
             double designTorque = ratedTorqueNm * MotorServiceFactor;
 
@@ -216,8 +230,60 @@ namespace Agitator.Business.Services
                 Math.Pow(BendingFactorKm * bendingMoment, 2) +
                 Math.Pow(TorsionFactorKt * designTorque, 2));
 
-            double diameterM = Math.Cbrt(16.0 * equivalentTorque / (Math.PI * AllowableShearStressPa));
+            double diameterM = Math.Cbrt(16.0 * equivalentTorque / (Math.PI * allowableShearPa));
             return RoundUpToStandardSizeM(diameterM);
+        }
+
+        /// <summary>
+        /// Allowable shear stress (Pa) for the shaft material at the operating temperature.
+        /// Falls back to the fixed constant when no material is selected.
+        /// </summary>
+        public static double ComputeAllowableShearStressPa(ShaftMaterial? material, double temperatureC)
+        {
+            if (material is null) return AllowableShearStressPa;
+
+            double factor = GetStrengthFactor(material, temperatureC);
+            double yieldPa = (double)material.YieldStrengthMpa * 1_000_000.0 * factor;
+            double ultimatePa = (double)material.UltimateStrengthMpa * 1_000_000.0 * factor;
+
+            double allowable = Math.Min(ShearFractionOfYield * yieldPa, ShearFractionOfUltimate * ultimatePa);
+            return allowable * KeywayReductionFactor;
+        }
+
+        /// <summary>Yield strength (MPa) at the operating temperature.</summary>
+        public static double ComputeYieldAtTemperatureMpa(ShaftMaterial material, double temperatureC)
+        {
+            return (double)material.YieldStrengthMpa * GetStrengthFactor(material, temperatureC);
+        }
+
+        /// <summary>Linear interpolation of the strength factor from the derating points.</summary>
+        private static double GetStrengthFactor(ShaftMaterial material, double temperatureC)
+        {
+            var points = material.TempDeratingPoints
+                .OrderBy(p => p.TemperatureC)
+                .ToList();
+
+            if (points.Count == 0) return 1.0;
+
+            double first = (double)points[0].TemperatureC;
+            double last = (double)points[^1].TemperatureC;
+
+            if (temperatureC <= first) return (double)points[0].StrengthFactor;
+            if (temperatureC >= last) return (double)points[^1].StrengthFactor;
+
+            for (int i = 0; i < points.Count - 1; i++)
+            {
+                double t1 = (double)points[i].TemperatureC;
+                double t2 = (double)points[i + 1].TemperatureC;
+                if (temperatureC >= t1 && temperatureC <= t2)
+                {
+                    double f1 = (double)points[i].StrengthFactor;
+                    double f2 = (double)points[i + 1].StrengthFactor;
+                    return f1 + (f2 - f1) * (temperatureC - t1) / (t2 - t1);
+                }
+            }
+
+            return 1.0;
         }
 
         private static double RoundUpToStandardSizeM(double diameterM)

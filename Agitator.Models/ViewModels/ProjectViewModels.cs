@@ -89,6 +89,17 @@ namespace Agitator.Models.ViewModel
         [Range(0.0001, 1000)]
         [Display(Name = "Viscosity (Pa.s)")]
         public double ViscosityPaS { get; set; } = 0.001;
+
+
+        [Range(-200, 600)]
+        [Display(Name = "Operating temperature (°C)")]
+        public double OperatingTemperatureC { get; set; } = 30;
+
+        // Shaft material and heat treatment
+        [Display(Name = "Shaft material / heat treatment")]
+        public int? ShaftMaterialId { get; set; }
+
+        public List<ShaftMaterial> ShaftMaterialOptions { get; set; } = new();
     }
 
     // ============================================================

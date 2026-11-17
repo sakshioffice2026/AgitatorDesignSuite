@@ -76,9 +76,11 @@ namespace Agitator.Business.Services
             var job = await db.CalculationResults
                 .Include(r => r.Project)
                     .ThenInclude(p => p!.Vessel)
-                .Include(r => r.Project)
+                                .Include(r => r.Project)
                     .ThenInclude(p => p!.Impeller)
-                .FirstOrDefaultAsync(r => r.CadStatus == CadJobStatus.Queued, ct);
+                        .ThenInclude(i => i!.ShaftMaterial)
+                .Include(r => r.Project)
+                    .ThenInclude(p => p!.FluidProperties).FirstOrDefaultAsync(r => r.CadStatus == CadJobStatus.Queued, ct);
 
             if (job is null || job.Project?.Vessel is null || job.Project?.Impeller is null)
                 return;
@@ -149,6 +151,9 @@ namespace Agitator.Business.Services
                 numberOfImpellers = impeller.NumberOfImpellers,
                 clearanceToDiameterRatio = impeller.ClearanceToDiameterRatio,
                 shaftDiameterMm = job.RecommendedShaftDiameterMm,
+                material = impeller.ShaftMaterial?.Grade ?? "SS316L",
+                heatTreatment = impeller.ShaftMaterial?.HeatTreatment ?? string.Empty,
+                operatingTemperatureC = job.Project!.FluidProperties?.OperatingTemperatureC,
                 shaftTotalLengthMm,
                 outputStepPath = Path.Combine(jobDir, "model.step"),
                 outputMeshPath = Path.Combine(jobDir, "preview.obj")

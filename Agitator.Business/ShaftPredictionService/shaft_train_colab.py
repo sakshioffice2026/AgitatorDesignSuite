@@ -23,7 +23,10 @@ from shaft_physics import (
     TRUSTED_LIQUID_HEIGHT_M,
     formula_shaft_diameter_m,
 )
-from shaft_model import ShaftPINN, physics_loss, data_loss, torch_raw_diameter_m
+from shaft_model import (
+    ShaftPINN, physics_loss, data_loss, torch_raw_diameter_m,
+    TRUSTED_ALLOWABLE_SHEAR_MPA,
+)
 
 # =============================== CONFIG ======================================
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -40,7 +43,7 @@ W_DATA = 1.0                 # weight: data term (real measurements)
 W_PHYSICS = 1.0              # weight: physics penalties (the formula is NOT used for training)
 
 # Optional real measured data. CSV header:
-# torque_nm,impeller_diameter_m,liquid_height_m,measured_diameter_m
+# torque_nm,impeller_diameter_m,liquid_height_m,allowable_shear_mpa,measured_diameter_m
 REAL_DATA_CSV = None         # e.g. "/content/drive/MyDrive/shaft_real_data.csv"
 
 CHECKPOINT_EVERY = 2000
@@ -58,7 +61,8 @@ def sample_inputs(n, device):
     t = log_uniform(n, *TRUSTED_TORQUE_NM, device)
     d = log_uniform(n, *TRUSTED_IMPELLER_DIAMETER_M, device)
     h = log_uniform(n, *TRUSTED_LIQUID_HEIGHT_M, device)
-    return torch.cat([t, d, h], dim=1)
+    tau = log_uniform(n, *TRUSTED_ALLOWABLE_SHEAR_MPA, device)
+    return torch.cat([t, d, h, tau], dim=1)
 
 
 def load_real_data(path, device):
@@ -71,12 +75,13 @@ def load_real_data(path, device):
                 float(r["torque_nm"]),
                 float(r["impeller_diameter_m"]),
                 float(r["liquid_height_m"]),
+                float(r["allowable_shear_mpa"]),
                 float(r["measured_diameter_m"]),
             ])
     if not rows:
         return None, None
     t = torch.tensor(rows, dtype=torch.float32, device=device)
-    return t[:, 0:3], t[:, 3:4]
+    return t[:, 0:4], t[:, 4:5]
 
 
 def save_checkpoint(model, optimizer, epoch, path):
@@ -146,17 +151,17 @@ def main():
     # quick reference check against the rounded formula
     model.eval()
     with torch.no_grad():
-        probe = torch.tensor([[500.0, 0.5, 2.0]], device=DEVICE)
+        probe = torch.tensor([[500.0, 0.5, 2.0, 40.0]], device=DEVICE)
         d_pred_mm = float(model(probe)) * 1000.0
-    d_formula_mm = formula_shaft_diameter_m(500.0, 0.5, 2.0) * 1000.0
-    print(f"Probe (500 N*m, 0.5 m, 2.0 m): PINN raw={d_pred_mm:.2f} mm, "
+    d_formula_mm = formula_shaft_diameter_m(500.0, 0.5, 2.0, 40.0e6) * 1000.0
+    print(f"Probe (500 N*m, 0.5 m, 2.0 m, 40 MPa): PINN raw={d_pred_mm:.2f} mm, "
           f"formula rounded={d_formula_mm:.1f} mm")
 
     # independent agreement check (evaluation only, never used for training)
     with torch.no_grad():
         xe = sample_inputs(5000, DEVICE)
         d_pred = model(xe)
-        d_ref = torch_raw_diameter_m(xe[:, 0:1], xe[:, 1:2], xe[:, 2:3])
+        d_ref = torch_raw_diameter_m(xe[:, 0:1], xe[:, 1:2], xe[:, 2:3], xe[:, 3:4] * 1e6)
         gap = ((d_pred - d_ref) / d_ref).abs()
     print(f"Agreement with formula on 5000 random points: "
           f"mean gap={float(gap.mean()) * 100:.3f} %, max gap={float(gap.max()) * 100:.3f} %")

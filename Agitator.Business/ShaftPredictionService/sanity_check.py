@@ -14,7 +14,6 @@ import sys
 import torch
 
 from shaft_physics import (
-    ALLOWABLE_SHEAR_STRESS_PA,
     TRUSTED_TORQUE_NM,
     TRUSTED_IMPELLER_DIAMETER_M,
     TRUSTED_LIQUID_HEIGHT_M,
@@ -23,6 +22,7 @@ from shaft_physics import (
 from shaft_model import (
     ShaftPINN,
     MAX_CORRECTION,
+    TRUSTED_ALLOWABLE_SHEAR_MPA,
     torch_raw_diameter_m,
     torch_shear_stress_pa,
 )
@@ -51,6 +51,7 @@ def sample(n):
         log_uniform(n, *TRUSTED_TORQUE_NM),
         log_uniform(n, *TRUSTED_IMPELLER_DIAMETER_M),
         log_uniform(n, *TRUSTED_LIQUID_HEIGHT_M),
+        log_uniform(n, *TRUSTED_ALLOWABLE_SHEAR_MPA),
     ], dim=1)
 
 
@@ -68,7 +69,7 @@ def main(path):
 
     with torch.no_grad():
         d = model(x)
-        d_formula = torch_raw_diameter_m(x[:, 0:1], x[:, 1:2], x[:, 2:3])
+        d_formula = torch_raw_diameter_m(x[:, 0:1], x[:, 1:2], x[:, 2:3], x[:, 3:4] * 1e6)
 
     # 1. NaN / inf
     results.append(report("No NaN/inf in output", bool(torch.isfinite(d).all())))
@@ -90,7 +91,7 @@ def main(path):
         [[round_up_to_standard_size_m(float(v))] for v in d], dtype=torch.float32
     )
     stress = torch_shear_stress_pa(x[:, 0:1], x[:, 1:2], x[:, 2:3], d_round)
-    bad = float((stress > ALLOWABLE_SHEAR_STRESS_PA).float().mean())
+        bad = float((stress > x[:, 3:4] * 1e6).float().mean())
     results.append(report(
         "Stress <= allowable after standard-size rounding",
         bad <= MAX_BAD_FRACTION,
@@ -113,9 +114,13 @@ def main(path):
     bad_h = float((grad[:, 2] < -TREND_TOLERANCE).float().mean())
     results.append(report("Diameter rises with liquid height", bad_h <= MAX_BAD_FRACTION,
                           f"(violations {bad_h * 100:.2f} %)"))
+    
+    bad_a = float((grad[:, 3] > TREND_TOLERANCE).float().mean())
+    results.append(report("Diameter falls as allowable stress rises", bad_a <= MAX_BAD_FRACTION,
+                          f"(violations {bad_a * 100:.2f} %)"))
 
     # 8. Different inputs -> different outputs
-    probe = torch.tensor([[100.0, 0.3, 1.0], [5000.0, 1.0, 3.0]])
+        probe = torch.tensor([[100.0, 0.3, 1.0, 40.0], [5000.0, 1.0, 3.0, 80.0]])
     with torch.no_grad():
         dp = model(probe)
     results.append(report("Different inputs give different outputs",

@@ -58,11 +58,11 @@ def equivalent_torque_nm(rated_torque_nm: float, impeller_diameter_m: float,
 
 
 def raw_shaft_diameter_m(rated_torque_nm: float, impeller_diameter_m: float,
-                         liquid_height_m: float) -> float:
+                         liquid_height_m: float,
+                         allowable_shear_pa: float = ALLOWABLE_SHEAR_STRESS_PA) -> float:
     """Shaft diameter before rounding to a standard size (m)."""
     te = equivalent_torque_nm(rated_torque_nm, impeller_diameter_m, liquid_height_m)
-    return ((16.0 * te) / (math.pi * ALLOWABLE_SHEAR_STRESS_PA)) ** (1.0 / 3.0)
-
+    return ((16.0 * te) / (math.pi * allowable_shear_pa)) ** (1.0 / 3.0)
 
 def round_up_to_standard_size_m(diameter_m: float) -> float:
     mm = diameter_m * 1000.0
@@ -73,12 +73,13 @@ def round_up_to_standard_size_m(diameter_m: float) -> float:
 
 
 def formula_shaft_diameter_m(rated_torque_nm: float, impeller_diameter_m: float,
-                             liquid_height_m: float) -> float:
+                             liquid_height_m: float,
+                             allowable_shear_pa: float = ALLOWABLE_SHEAR_STRESS_PA) -> float:
     """Same result as CalculateShaftDiameterM in C#."""
     return round_up_to_standard_size_m(
-        raw_shaft_diameter_m(rated_torque_nm, impeller_diameter_m, liquid_height_m)
+        raw_shaft_diameter_m(rated_torque_nm, impeller_diameter_m, liquid_height_m,
+                             allowable_shear_pa)
     )
-
 
 def combined_shear_stress_pa(rated_torque_nm: float, impeller_diameter_m: float,
                              liquid_height_m: float, shaft_diameter_m: float) -> float:

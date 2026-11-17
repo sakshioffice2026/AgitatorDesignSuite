@@ -24,6 +24,16 @@ namespace Agitator.Models.DTOs
 
         [JsonPropertyName("liquidHeightM")]
         public double LiquidHeightM { get; set; }
+
+
+        [JsonPropertyName("allowableShearStressMpa")]
+        public double AllowableShearStressMpa { get; set; }
+
+        [JsonPropertyName("operatingTemperatureC")]
+        public double OperatingTemperatureC { get; set; }
+
+        [JsonPropertyName("shaftMaterialName")]
+        public string ShaftMaterialName { get; set; } = string.Empty;
     }
 
     /// <summary>Raw response from the Python service. Names match the Python response exactly.</summary>
@@ -75,5 +85,10 @@ namespace Agitator.Models.DTOs
         public string Notes { get; set; } = string.Empty;
         public string ModelVersion { get; set; } = string.Empty;
         public DateTime GeneratedAtUtc { get; set; }
+        public string ShaftMaterialName { get; set; } = string.Empty;
+        public string HeatTreatment { get; set; } = string.Empty;
+        public double OperatingTemperatureC { get; set; }
+        public double YieldStrengthAtTempMpa { get; set; }
+
     }
 }

@@ -41,7 +41,9 @@ namespace Agitator.Repositories.Repositories
         {
             return await _db.Projects
                 .Include(p => p.Vessel)
-                .Include(p => p.Impeller)
+                                .Include(p => p.Impeller)
+                    .ThenInclude(i => i!.ShaftMaterial)
+                        .ThenInclude(m => m!.TempDeratingPoints)
                 .Include(p => p.FluidProperties)
                 .Include(p => p.CalculationResult)
                 .FirstOrDefaultAsync(p => p.Id == id);
@@ -69,12 +71,14 @@ namespace Agitator.Repositories.Repositories
                     Type = vm.ImpellerType,
                     DiameterM = vm.ImpellerDiameterM,
                     RotationalSpeedRpm = vm.RotationalSpeedRpm,
-                    NumberOfImpellers = vm.NumberOfImpellers
+                    NumberOfImpellers = vm.NumberOfImpellers,
+                    ShaftMaterialId = vm.ShaftMaterialId
                 },
                 FluidProperties = new FluidProperties
                 {
                     DensityKgM3 = vm.DensityKgM3,
-                    ViscosityPaS = vm.ViscosityPaS
+                    ViscosityPaS = vm.ViscosityPaS,
+                    OperatingTemperatureC = vm.OperatingTemperatureC
                 }
             };
 
@@ -113,12 +117,14 @@ namespace Agitator.Repositories.Repositories
                 project.Impeller.DiameterM = vm.ImpellerDiameterM;
                 project.Impeller.RotationalSpeedRpm = vm.RotationalSpeedRpm;
                 project.Impeller.NumberOfImpellers = vm.NumberOfImpellers;
+                project.Impeller.ShaftMaterialId = vm.ShaftMaterialId;
             }
 
             if (project.FluidProperties is not null)
             {
                 project.FluidProperties.DensityKgM3 = vm.DensityKgM3;
                 project.FluidProperties.ViscosityPaS = vm.ViscosityPaS;
+                project.FluidProperties.OperatingTemperatureC = vm.OperatingTemperatureC;
             }
 
             await _db.SaveChangesAsync();

@@ -20,6 +20,11 @@ namespace Agitator.Core.Entities
 
         public bool IsNewtonian { get; set; } = true;
 
+
+        /// <summary>Operating temperature of the fluid and shaft in °C.</summary>
+        [Range(-200, 600)]
+        public double OperatingTemperatureC { get; set; } = 30;
+
         [StringLength(200)]
         public string? Notes { get; set; }
     }

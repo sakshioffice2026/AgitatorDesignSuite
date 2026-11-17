@@ -13,9 +13,10 @@ namespace Agitator.Business.Contracts
         /// Throws <see cref="InvalidOperationException"/> if the service is unreachable or returns an invalid response.
         /// </summary>
         Task<ShaftPredictionResult> PredictAsync(
-            Vessel vessel,
-            Impeller impeller,
-            CalculationResult calculation,
-            CancellationToken cancellationToken = default);
+    Vessel vessel,
+    Impeller impeller,
+    FluidProperties fluid,
+    CalculationResult calculation,
+    CancellationToken cancellationToken = default);
     }
 }

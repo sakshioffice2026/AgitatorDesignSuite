@@ -6,6 +6,8 @@
         ICalculationResultRepository calculationResultRepository { get; }
         IExceptionHandlerRepository exceptionHandlerRepository { get; }
 
+        IShaftMaterialRepository shaftMaterialRepository { get; }
+
         Task<int> Commit();
     }
 }

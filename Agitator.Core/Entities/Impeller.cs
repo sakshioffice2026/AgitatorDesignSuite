@@ -46,5 +46,10 @@ namespace Agitator.Core.Entities
         /// </summary>
         [Range(0, 2)]
         public double ClearanceToDiameterRatio { get; set; } = 0.33;
+
+
+        /// <summary>Shaft material and heat treatment (FK to ShaftMaterials).</summary>
+        public int? ShaftMaterialId { get; set; }
+        public ShaftMaterial? ShaftMaterial { get; set; }
     }
 }

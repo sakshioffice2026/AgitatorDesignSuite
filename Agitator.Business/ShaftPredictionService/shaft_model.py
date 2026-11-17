@@ -23,7 +23,6 @@ import torch
 import torch.nn as nn
 
 from shaft_physics import (
-    ALLOWABLE_SHEAR_STRESS_PA,
     BENDING_FACTOR_KM,
     TORSION_FACTOR_KT,
     RADIAL_FORCE_FRACTION,
@@ -37,6 +36,8 @@ from shaft_physics import (
 
 MAX_CORRECTION = 0.10  # agreement tolerance (+/- 10 %) used by sanity_check, not inside the model
 
+# Allowable shear stress range (MPa) used for training. Must match service.py.
+TRUSTED_ALLOWABLE_SHEAR_MPA = (15.0, 250.0)
 # Output range of the network (metres). Covers the whole trusted input range.
 D_MIN_M = 0.004
 D_MAX_M = 3.0
@@ -45,14 +46,13 @@ D_MAX_M = 3.0
 # ---------------------------------------------------------------------------
 # Torch version of the formula (differentiable)
 # ---------------------------------------------------------------------------
-def torch_raw_diameter_m(torque_nm, imp_d_m, liq_h_m):
+def torch_raw_diameter_m(torque_nm, imp_d_m, liq_h_m, allowable_shear_pa):
     design_t = torque_nm * MOTOR_SERVICE_FACTOR
     eff_r = EFFECTIVE_RADIUS_FRACTION * imp_d_m / 2.0
     radial_f = RADIAL_FORCE_FRACTION * (design_t / eff_r)
     moment = radial_f * (liq_h_m * SHAFT_LENGTH_FACTOR)
     eq_t = torch.sqrt((BENDING_FACTOR_KM * moment) ** 2 + (TORSION_FACTOR_KT * design_t) ** 2)
-    return torch.pow((16.0 * eq_t) / (math.pi * ALLOWABLE_SHEAR_STRESS_PA), 1.0 / 3.0)
-
+    return torch.pow((16.0 * eq_t) / (math.pi * allowable_shear_pa), 1.0 / 3.0)
 
 def torch_equivalent_torque(torque_nm, imp_d_m, liq_h_m):
     design_t = torque_nm * MOTOR_SERVICE_FACTOR
@@ -73,12 +73,14 @@ def torch_shear_stress_pa(torque_nm, imp_d_m, liq_h_m, shaft_d_m):
 class LogRangeScaler(nn.Module):
     def __init__(self):
         super().__init__()
-        lo = torch.log(torch.tensor([TRUSTED_TORQUE_NM[0],
+                lo = torch.log(torch.tensor([TRUSTED_TORQUE_NM[0],
                                      TRUSTED_IMPELLER_DIAMETER_M[0],
-                                     TRUSTED_LIQUID_HEIGHT_M[0]]))
+                                     TRUSTED_LIQUID_HEIGHT_M[0],
+                                     TRUSTED_ALLOWABLE_SHEAR_MPA[0]]))
         hi = torch.log(torch.tensor([TRUSTED_TORQUE_NM[1],
                                      TRUSTED_IMPELLER_DIAMETER_M[1],
-                                     TRUSTED_LIQUID_HEIGHT_M[1]]))
+                                     TRUSTED_LIQUID_HEIGHT_M[1],
+                                     TRUSTED_ALLOWABLE_SHEAR_MPA[1]]))
         self.register_buffer("lo", lo)
         self.register_buffer("hi", hi)
 
@@ -94,7 +96,7 @@ class ShaftPINN(nn.Module):
         super().__init__()
         self.scaler = LogRangeScaler()
 
-        layers = [nn.Linear(3, hidden), nn.Tanh()]
+         layers = [nn.Linear(4, hidden), nn.Tanh()]
         for _ in range(n_layers - 1):
             layers += [nn.Linear(hidden, hidden), nn.Tanh()]
         layers += [nn.Linear(hidden, 1)]
@@ -102,7 +104,7 @@ class ShaftPINN(nn.Module):
 
     def forward(self, x):
         """
-        x: tensor [N, 3] = (rated_torque_nm, impeller_diameter_m, liquid_height_m)
+        x: tensor [N, 4] = (rated_torque_nm, impeller_diameter_m, liquid_height_m, allowable_shear_mpa)
         returns: tensor [N, 1] raw shaft diameter in metres (no formula used here)
         """
         log_lo = math.log(D_MIN_M)
@@ -133,25 +135,28 @@ def physics_loss(model: ShaftPINN, x: torch.Tensor):
     xe = torch.exp(log_x)
 
     # 1. stress balance (physics residual)
-    stress = torch_shear_stress_pa(xe[:, 0:1], xe[:, 1:2], xe[:, 2:3], d)
-    stress_pen = torch.log(stress / ALLOWABLE_SHEAR_STRESS_PA).pow(2).mean()
+        stress = torch_shear_stress_pa(xe[:, 0:1], xe[:, 1:2], xe[:, 2:3], d)
+    allowable_pa = xe[:, 3:4] * 1e6
+    stress_pen = torch.log(stress / allowable_pa).pow(2).mean()
 
     # 2-4. monotonic trends through autograd (log-log slopes)
     grad = torch.autograd.grad(torch.log(d).sum(), log_x, create_graph=True)[0]
-    d_dtorque, d_dimp, d_dheight = grad[:, 0], grad[:, 1], grad[:, 2]
+    d_dtorque, d_dimp, d_dheight, d_dtau = grad[:, 0], grad[:, 1], grad[:, 2], grad[:, 3]
     torque_pen = torch.relu(-d_dtorque).pow(2).mean()
     imp_pen = torch.relu(d_dimp).pow(2).mean()
     height_pen = torch.relu(-d_dheight).pow(2).mean()
+    tau_pen = torch.relu(d_dtau).pow(2).mean()  # d must not increase when allowable stress increases
 
     # 5. positivity
     pos_pen = torch.relu(-d).pow(2).mean()
 
-    total = stress_pen + torque_pen + imp_pen + height_pen + pos_pen
+        total = stress_pen + torque_pen + imp_pen + height_pen + tau_pen + pos_pen
     parts = {
         "stress": float(stress_pen),
         "torque_trend": float(torque_pen),
         "impeller_trend": float(imp_pen),
         "height_trend": float(height_pen),
+        "allowable_stress_trend": float(tau_pen),
         "positive": float(pos_pen),
     }
     return total, parts

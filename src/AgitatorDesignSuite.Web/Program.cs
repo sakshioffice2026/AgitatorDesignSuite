@@ -45,7 +45,7 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWorks>();
 builder.Services.AddScoped<IProjectRepository, Agitator.Repositories.Repositories.ProjectRepository>();
 builder.Services.AddScoped<ICalculationResultRepository, Agitator.Repositories.Repositories.CalculationResultRepository>();
 builder.Services.AddScoped<IExceptionHandlerRepository, Agitator.Repositories.Repositories.ExceptionHandlerRepository>();
-
+builder.Services.AddScoped<IShaftMaterialRepository, Agitator.Repositories.Repositories.ShaftMaterialRepository>();
 // --- Business services ---
 builder.Services.AddScoped<IAgitatorCalculationService, AgitatorCalculationService>();
 builder.Services.AddHttpClient<IShaftPredictionService, ShaftPredictionService>();

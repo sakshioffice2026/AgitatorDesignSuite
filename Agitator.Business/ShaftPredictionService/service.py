@@ -22,7 +22,6 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from shaft_physics import (
-    ALLOWABLE_SHEAR_STRESS_PA,
     TRUSTED_TORQUE_NM,
     TRUSTED_IMPELLER_DIAMETER_M,
     TRUSTED_LIQUID_HEIGHT_M,
@@ -35,8 +34,11 @@ from shaft_physics import (
 from shaft_model import ShaftPINN
 
 MODEL_PATH = os.environ.get("SHAFT_MODEL_PATH", "models/shaft_model.pth")
+
 MODEL_VERSION = os.environ.get("SHAFT_MODEL_VERSION", "unversioned")
 
+# Allowable shear range (MPa) the PINN was trained on. Must match shaft_train_colab.py.
+TRUSTED_ALLOWABLE_SHEAR_MPA = (15.0, 250.0)
 _state = {"model": None}
 
 
@@ -58,6 +60,9 @@ class ShaftPredictRequest(BaseModel):
     ratedTorqueNm: float = Field(..., gt=0)
     impellerDiameterM: float = Field(..., gt=0)
     liquidHeightM: float = Field(..., gt=0)
+    allowableShearStressMpa: float = Field(40.0, gt=0)
+    operatingTemperatureC: float = 30.0
+    shaftMaterialName: str = ""
 
 
 class ShaftPredictResponse(BaseModel):
@@ -85,19 +90,24 @@ def predict(req: ShaftPredictRequest):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
-    t, d, h = req.ratedTorqueNm, req.impellerDiameterM, req.liquidHeightM
+        t, d, h = req.ratedTorqueNm, req.impellerDiameterM, req.liquidHeightM
+    tau_mpa = req.allowableShearStressMpa
+    tau_pa = tau_mpa * 1e6
 
-    if not all(math.isfinite(v) for v in (t, d, h)):
+    if not all(math.isfinite(v) for v in (t, d, h, tau_mpa)):
         raise HTTPException(status_code=422, detail="Inputs must be finite numbers")
 
-    in_range = is_within_trusted_range(t, d, h)
+    in_range = (
+        is_within_trusted_range(t, d, h)
+        and TRUSTED_ALLOWABLE_SHEAR_MPA[0] <= tau_mpa <= TRUSTED_ALLOWABLE_SHEAR_MPA[1]
+    )
 
-    raw_formula_unrounded_m = raw_shaft_diameter_m(t, d, h)
-    formula_std_m = formula_shaft_diameter_m(t, d, h)
+    raw_formula_unrounded_m = raw_shaft_diameter_m(t, d, h, tau_pa)
+    formula_std_m = formula_shaft_diameter_m(t, d, h, tau_pa)
 
     notes = []
     if in_range:
-        x = torch.tensor([[t, d, h]], dtype=torch.float32)
+                x = torch.tensor([[t, d, h, tau_mpa]], dtype=torch.float32)
         with torch.no_grad():
             raw_pred_m = float(model(x).item())
     else:
@@ -115,8 +125,8 @@ def predict(req: ShaftPredictRequest):
     # gap on raw (unrounded) values so it is not hidden by standard sizes
     gap_pct = (raw_pred_m - raw_formula_unrounded_m) / raw_formula_unrounded_m * 100.0
 
-    stress_pa = combined_shear_stress_pa(t, d, h, pred_std_m)
-    if stress_pa > ALLOWABLE_SHEAR_STRESS_PA:
+        stress_pa = combined_shear_stress_pa(t, d, h, pred_std_m)
+    if stress_pa > tau_pa:
         notes.append("Shear stress exceeds allowable at predicted size.")
     if pred_std_m != formula_std_m:
         notes.append("Predicted standard size differs from formula standard size.")
@@ -128,7 +138,7 @@ def predict(req: ShaftPredictRequest):
         rawFormulaDiameterMm=round(raw_formula_unrounded_m * 1000.0, 2),
         gapPercent=round(gap_pct, 3),
         shearStressMpa=round(stress_pa / 1e6, 3),
-        allowableShearStressMpa=round(ALLOWABLE_SHEAR_STRESS_PA / 1e6, 3),
+        allowableShearStressMpa=round(tau_mpa, 3),
         withinTrustedRange=in_range,
         modelVersion=MODEL_VERSION,
         notes=" ".join(notes),
