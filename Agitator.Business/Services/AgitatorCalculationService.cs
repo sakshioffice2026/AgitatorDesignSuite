@@ -234,6 +234,25 @@ namespace Agitator.Business.Services
             return RoundUpToStandardSizeM(diameterM);
         }
 
+        /// <summary>Design torque (N*m) = rated torque x motor service factor.</summary>
+        public static double ComputeDesignTorqueNm(double ratedTorqueNm)
+        {
+            return ratedTorqueNm * MotorServiceFactor;
+        }
+
+        /// <summary>Hydraulic radial force (N) at the impeller, same basis as the shaft formula.</summary>
+        public static double ComputeRadialForceN(double ratedTorqueNm, double impellerDiameterM)
+        {
+            double effectiveRadius = 0.75 * impellerDiameterM / 2.0;
+            double tangentialForce = ComputeDesignTorqueNm(ratedTorqueNm) / effectiveRadius;
+            return RadialForceFraction * tangentialForce;
+        }
+
+        /// <summary>Shaft length (m) used by the shaft formula.</summary>
+        public static double ComputeShaftLengthM(double liquidHeightM)
+        {
+            return liquidHeightM * 1.15;
+        }
         /// <summary>
         /// Allowable shear stress (Pa) for the shaft material at the operating temperature.
         /// Falls back to the fixed constant when no material is selected.

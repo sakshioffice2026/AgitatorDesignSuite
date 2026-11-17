@@ -137,6 +137,83 @@ else
         }
     </div>
 
+    string? feaStatus = null;
+    string? feaError = null;
+    double feaStress = 0;
+    double feaAllowable = 0;
+    double feaUtilization = 0;
+    bool feaPassed = false;
+    if (!string.IsNullOrWhiteSpace(r.FeaCheckJson))
+    {
+        try
+        {
+            using var feaDoc = System.Text.Json.JsonDocument.Parse(r.FeaCheckJson);
+            var feaRoot = feaDoc.RootElement;
+            feaStatus = feaRoot.TryGetProperty("status", out var feaStatusElement) ? feaStatusElement.GetString() : null;
+            if (feaStatus == "ok")
+            {
+                feaStress = feaRoot.GetProperty("feaMaxShearMpa").GetDouble();
+                feaAllowable = feaRoot.GetProperty("allowableShearMpa").GetDouble();
+                feaUtilization = feaRoot.GetProperty("utilization").GetDouble();
+                feaPassed = feaRoot.GetProperty("passed").GetBoolean();
+            }
+            else
+            {
+                feaError = feaRoot.TryGetProperty("error", out var feaErrorElement) ? feaErrorElement.GetString() : null;
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            feaStatus = null;
+        }
+        catch (InvalidOperationException)
+        {
+            feaStatus = null;
+        }
+        catch (KeyNotFoundException)
+        {
+            feaStatus = null;
+        }
+    }
+
+    <div class="panel mt-3">
+        <h2 class="h6">Shaft FEA Check (Finite Element Analysis)</h2>
+
+        @if (string.IsNullOrWhiteSpace(r.FeaCheckJson))
+        {
+            <p class="text-muted mb-0">The FEA check runs automatically after "Generate 3D Model (FreeCAD)".</p>
+        }
+        else if (feaStatus == "ok")
+        {
+            if (feaPassed)
+            {
+                <div class="alert alert-success py-2" role="status">
+                    <i class="bi bi-check-circle-fill"></i> FEA check passed. The stress in the recommended shaft is below the allowable limit.
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-danger py-2" role="alert">
+                    <i class="bi bi-x-circle-fill"></i> FEA check failed. The stress in the recommended shaft is above the allowable limit. Please ask an engineer to review.
+                </div>
+            }
+            <table class="table table-sm kv mb-2">
+                <tr><th>Shaft size checked</th><td>@r.RecommendedShaftDiameterMm.ToString("F0") mm</td></tr>
+                <tr><th>FEA maximum shear stress</th><td>@feaStress.ToString("F2") MPa</td></tr>
+                <tr><th>Allowable shear stress</th><td>@feaAllowable.ToString("F1") MPa</td></tr>
+                <tr><th>Utilization</th><td>@((feaUtilization * 100.0).ToString("F0")) %</td></tr>
+            </table>
+            <p class="text-muted small mb-1">The FEA applies the real loads to a 3D model of the shaft. It does not include the 1.5 bending safety factor used in the formula, so its stress is normally lower than the formula stress.</p>
+            <p class="text-muted small mb-0">Checked @r.FeaCheckedAt?.ToString("yyyy-MM-dd HH:mm") UTC</p>
+        }
+        else
+        {
+            <div class="alert alert-warning py-2 mb-0" role="alert">
+                <i class="bi bi-exclamation-triangle-fill"></i> The FEA check could not be completed. @feaError
+            </div>
+        }
+    </div>
+
     <div class="d-flex gap-2 my-3">
         <a class="btn btn-outline-secondary" href="/Projects/DownloadReport/@Model.Id"><i class="bi bi-file-earmark-pdf"></i> Download PDF Datasheet</a>
 

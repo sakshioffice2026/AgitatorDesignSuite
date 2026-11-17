@@ -56,5 +56,10 @@ namespace Agitator.Core.Entities
         // --- Shaft PINN prediction ---
         public string? PredictionJson { get; set; }
         public DateTime? PredictedAt { get; set; }
+
+
+        // --- Shaft FEA check ---
+        public string? FeaCheckJson { get; set; }
+        public DateTime? FeaCheckedAt { get; set; }
     }
 }

@@ -78,7 +78,8 @@ namespace Agitator.Business.Services
                     .ThenInclude(p => p!.Vessel)
                                 .Include(r => r.Project)
                     .ThenInclude(p => p!.Impeller)
-                        .ThenInclude(i => i!.ShaftMaterial)
+         .ThenInclude(i => i!.ShaftMaterial)
+                            .ThenInclude(m => m!.TempDeratingPoints)
                 .Include(r => r.Project)
                     .ThenInclude(p => p!.FluidProperties).FirstOrDefaultAsync(r => r.CadStatus == CadJobStatus.Queued, ct);
 
@@ -102,6 +103,8 @@ namespace Agitator.Business.Services
                 job.CadJobError = ex.Message;
             }
 
+            if (job.CadStatus == CadJobStatus.Completed)
+                await RunFeaCheckSafeAsync(job, ct);
             await db.SaveChangesAsync(ct);
         }
 
@@ -184,6 +187,92 @@ namespace Agitator.Business.Services
                     $"freecadcmd exited with code {process.ExitCode}. stderr: {stderr}. stdout: {stdout}");
 
             return (parameters.outputStepPath, parameters.outputMeshPath);
+        }
+
+
+        /// <summary>
+        /// Runs CadScripts/fea_check_shaft.py after the CAD job finishes.
+        /// Never fails the CAD job: any error is stored as a failed FEA result.
+        /// </summary>
+        private async Task RunFeaCheckSafeAsync(CalculationResult job, CancellationToken ct)
+        {
+            try
+            {
+                var vessel = job.Project!.Vessel!;
+                var impeller = job.Project!.Impeller!;
+                double temperatureC = job.Project.FluidProperties?.OperatingTemperatureC ?? 30;
+                double allowableMpa = AgitatorCalculationService
+                    .ComputeAllowableShearStressPa(impeller.ShaftMaterial, temperatureC) / 1_000_000.0;
+
+                var jobDir = Path.Combine(_options.OutputDirectory, $"project_{job.ProjectId}");
+                Directory.CreateDirectory(jobDir);
+
+                var feaParams = new
+                {
+                    shaftDiameterMm = job.RecommendedShaftDiameterMm,
+                    shaftLengthMm = AgitatorCalculationService.ComputeShaftLengthM(vessel.LiquidHeightM) * 1000.0,
+                    designTorqueNm = AgitatorCalculationService.ComputeDesignTorqueNm(job.TorqueNm),
+                    radialForceN = AgitatorCalculationService.ComputeRadialForceN(job.TorqueNm, impeller.DiameterM),
+                    allowableShearMpa = allowableMpa
+                };
+
+                var paramsPath = Path.Combine(jobDir, "fea_params.json");
+                var resultPath = Path.Combine(jobDir, "fea_result.json");
+                if (File.Exists(resultPath)) File.Delete(resultPath);
+                await File.WriteAllTextAsync(paramsPath, JsonSerializer.Serialize(feaParams), ct);
+
+                var scriptPath = Path.Combine(
+                    Path.GetDirectoryName(Path.GetFullPath(_options.MacroPath))!,
+                    "fea_check_shaft.py");
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = _options.FreeCadCmdPath,
+                    Arguments = $"\"{scriptPath}\" --params \"{paramsPath}\" --output \"{resultPath}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using var process = new Process { StartInfo = psi };
+                process.Start();
+
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeout.CancelAfter(TimeSpan.FromMinutes(5));
+
+                var stdoutTask = process.StandardOutput.ReadToEndAsync();
+                var stderrTask = process.StandardError.ReadToEndAsync();
+
+                try
+                {
+                    await process.WaitForExitAsync(timeout.Token);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    try { process.Kill(entireProcessTree: true); } catch { }
+                    throw new TimeoutException("FEA check timed out after 5 minutes.");
+                }
+
+                await Task.WhenAll(stdoutTask, stderrTask);
+
+                if (!File.Exists(resultPath))
+                    throw new InvalidOperationException(
+                        $"FEA produced no result. Exit code {process.ExitCode}. stderr: {stderrTask.Result}");
+
+                job.FeaCheckJson = await File.ReadAllTextAsync(resultPath, ct);
+                job.FeaCheckedAt = DateTime.UtcNow;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "FEA check failed for project {ProjectId}", job.ProjectId);
+                job.FeaCheckJson = JsonSerializer.Serialize(new { status = "failed", error = ex.Message });
+                job.FeaCheckedAt = DateTime.UtcNow;
+            }
         }
     }
 }
