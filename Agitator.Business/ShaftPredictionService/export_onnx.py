@@ -21,7 +21,7 @@ OPSET_VERSION = 17
 
 
 def main(checkpoint_path, onnx_path):
-    ckpt = torch.load(checkpoint_path, map_location="cpu")
+    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     model = ShaftPINN(hidden=ckpt["hidden"], n_layers=ckpt["n_layers"])
     model.load_state_dict(ckpt["model_state"])
     model.eval()

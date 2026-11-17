@@ -99,7 +99,7 @@ def main():
     start_epoch = 0
 
     if RESUME_FROM and os.path.exists(RESUME_FROM):
-        ckpt = torch.load(RESUME_FROM, map_location=DEVICE)
+        ckpt = torch.load(RESUME_FROM, map_location=DEVICE, weights_only=True)
         model.load_state_dict(ckpt["model_state"])
         optimizer.load_state_dict(ckpt["optimizer_state"])
         start_epoch = ckpt["epoch"] + 1

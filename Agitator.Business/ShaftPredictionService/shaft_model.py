@@ -3,8 +3,10 @@ shaft_model.py
 
 Physics-guided neural network for agitator shaft diameter.
 
-The network predicts the shaft diameter from the three inputs ALONE. The formula is
-NOT used inside the model, so the prediction is an independent second opinion.
+The network predicts the shaft diameter from the three inputs ALONE; the formula is
+not called inside forward(). However, the training loss uses the same stress equation,
+so the network is a fast learned surrogate of that formula, NOT an independent
+validation of the design.
 
 It is trained only on physics rules (see physics_loss):
     - the shear stress at the predicted diameter must equal the allowable stress

@@ -34,7 +34,7 @@ SEED = 123
 
 
 def load_model(path):
-    ckpt = torch.load(path, map_location="cpu")
+    ckpt = torch.load(path, map_location="cpu", weights_only=True)
     model = ShaftPINN(hidden=ckpt["hidden"], n_layers=ckpt["n_layers"])
     model.load_state_dict(ckpt["model_state"])
     model.eval()

@@ -272,7 +272,7 @@
                 var edgeMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
 
                 var mesh = new THREE.Mesh(it.geometry, material);
-                var edges = new THREE.LineSegments(new THREE.EdgesGeometry(it.geometry, 25), edgeMaterial);
+                var edges = new THREE.LineSegments(new THREE.EdgesGeometry(it.geometry, isTank ? 60 : 25), edgeMaterial);
 
                 root.add(mesh);
                 root.add(edges);

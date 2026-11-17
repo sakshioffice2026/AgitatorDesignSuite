@@ -13,6 +13,7 @@ JSON field names are camelCase and must match the .NET DTO exactly.
 Units: N*m, metres. Diameters in the response are millimetres.
 """
 
+import math
 import os
 from contextlib import asynccontextmanager
 
@@ -26,6 +27,7 @@ from shaft_physics import (
     TRUSTED_IMPELLER_DIAMETER_M,
     TRUSTED_LIQUID_HEIGHT_M,
     formula_shaft_diameter_m,
+    raw_shaft_diameter_m,
     round_up_to_standard_size_m,
     combined_shear_stress_pa,
     is_within_trusted_range,
@@ -40,7 +42,7 @@ _state = {"model": None}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    ckpt = torch.load(MODEL_PATH, map_location="cpu")
+    ckpt = torch.load(MODEL_PATH, map_location="cpu", weights_only=True)
     model = ShaftPINN(hidden=ckpt["hidden"], n_layers=ckpt["n_layers"])
     model.load_state_dict(ckpt["model_state"])
     model.eval()
@@ -85,30 +87,35 @@ def predict(req: ShaftPredictRequest):
 
     t, d, h = req.ratedTorqueNm, req.impellerDiameterM, req.liquidHeightM
 
-    x = torch.tensor([[t, d, h]], dtype=torch.float32)
-    with torch.no_grad():
-        raw_pred_m = float(model(x).item())
+    if not all(math.isfinite(v) for v in (t, d, h)):
+        raise HTTPException(status_code=422, detail="Inputs must be finite numbers")
 
-    pred_std_m = round_up_to_standard_size_m(raw_pred_m)
-    formula_std_m = formula_shaft_diameter_m(t, d, h)
-    raw_formula_m = formula_std_m  # rounded reference for display
-
-    # gap on raw (unrounded) values so it is not hidden by standard sizes
-    from shaft_physics import raw_shaft_diameter_m
-    raw_formula_unrounded_m = raw_shaft_diameter_m(t, d, h)
-    gap_pct = (raw_pred_m - raw_formula_unrounded_m) / raw_formula_unrounded_m * 100.0
-
-    stress_pa = combined_shear_stress_pa(t, d, h, pred_std_m)
     in_range = is_within_trusted_range(t, d, h)
 
+    raw_formula_unrounded_m = raw_shaft_diameter_m(t, d, h)
+    formula_std_m = formula_shaft_diameter_m(t, d, h)
+
     notes = []
-    if not in_range:
+    if in_range:
+        x = torch.tensor([[t, d, h]], dtype=torch.float32)
+        with torch.no_grad():
+            raw_pred_m = float(model(x).item())
+    else:
+        # Never extrapolate the network outside its trusted range: fall back to the formula.
+        raw_pred_m = raw_formula_unrounded_m
         notes.append(
-            "Input outside trusted range "
+            "Input outside trusted range, PINN skipped and formula value returned "
             f"(torque {TRUSTED_TORQUE_NM[0]}-{TRUSTED_TORQUE_NM[1]} N*m, "
             f"impeller {TRUSTED_IMPELLER_DIAMETER_M[0]}-{TRUSTED_IMPELLER_DIAMETER_M[1]} m, "
             f"liquid height {TRUSTED_LIQUID_HEIGHT_M[0]}-{TRUSTED_LIQUID_HEIGHT_M[1]} m)."
         )
+
+    pred_std_m = round_up_to_standard_size_m(raw_pred_m)
+
+    # gap on raw (unrounded) values so it is not hidden by standard sizes
+    gap_pct = (raw_pred_m - raw_formula_unrounded_m) / raw_formula_unrounded_m * 100.0
+
+    stress_pa = combined_shear_stress_pa(t, d, h, pred_std_m)
     if stress_pa > ALLOWABLE_SHEAR_STRESS_PA:
         notes.append("Shear stress exceeds allowable at predicted size.")
     if pred_std_m != formula_std_m:
@@ -117,7 +124,7 @@ def predict(req: ShaftPredictRequest):
     return ShaftPredictResponse(
         predictedShaftDiameterMm=round(pred_std_m * 1000.0, 1),
         rawPredictedDiameterMm=round(raw_pred_m * 1000.0, 2),
-        formulaShaftDiameterMm=round(raw_formula_m * 1000.0, 1),
+        formulaShaftDiameterMm=round(formula_std_m * 1000.0, 1),  # standard (rounded-up) size
         rawFormulaDiameterMm=round(raw_formula_unrounded_m * 1000.0, 2),
         gapPercent=round(gap_pct, 3),
         shearStressMpa=round(stress_pa / 1e6, 3),
