@@ -6,6 +6,7 @@ namespace Agitator.Repositories.Contracts
     {
         Task<CalculationResult?> GetByProjectIdAsync(int projectId);
         Task CreateAsync(CalculationResult result);
+        Task UpdateCalculationAsync(CalculationResult result);
         Task<(bool success, string? error)> ChangeCadStatusAsync(int projectId, CadJobStatus status, string? error = null, string? stepFilePath = null, string? previewMeshPath = null);
         Task<(bool success, string? error)> SetReportPathAsync(int projectId, string reportPdfPath);
 

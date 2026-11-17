@@ -26,6 +26,34 @@ namespace Agitator.Repositories.Repositories
             await _db.SaveChangesAsync();
         }
 
+        public async Task UpdateCalculationAsync(CalculationResult result)
+        {
+            var existing = await _db.CalculationResults
+                .FirstOrDefaultAsync(r => r.ProjectId == result.ProjectId);
+
+            if (existing is null)
+            {
+                _db.CalculationResults.Add(result);
+            }
+            else
+            {
+                existing.ReynoldsNumber = result.ReynoldsNumber;
+                existing.Regime = result.Regime;
+                existing.PowerNumber = result.PowerNumber;
+                existing.PowerDrawWatts = result.PowerDrawWatts;
+                existing.TorqueNm = result.TorqueNm;
+                existing.TipSpeedMPerS = result.TipSpeedMPerS;
+                existing.RecommendedShaftDiameterMm = result.RecommendedShaftDiameterMm;
+                existing.RecommendedMotorPowerKw = result.RecommendedMotorPowerKw;
+                existing.CalculatedAtUtc = DateTime.UtcNow;
+
+                // The old prediction no longer matches the new inputs.
+                existing.PredictionJson = null;
+                existing.PredictedAt = null;
+            }
+
+            await _db.SaveChangesAsync();
+        }
         public async Task<(bool success, string? error)> ChangeCadStatusAsync(
             int projectId, CadJobStatus status, string? error = null,
             string? stepFilePath = null, string? previewMeshPath = null)

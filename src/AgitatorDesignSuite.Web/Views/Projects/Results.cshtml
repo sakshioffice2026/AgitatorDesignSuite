@@ -16,8 +16,8 @@
 else
 {
     <div class="row g-3">
-        <div class="col-md-6">
-            <div class="panel">
+        <div class="col-md-6 d-flex">
+            <div class="panel w-100">
                 <h2 class="h6">Process Results</h2>
                 <table class="table table-sm kv mb-0">
                     <tr><th>Reynolds number</th><td>@r.ReynoldsNumber.ToString("F0") (@r.Regime)</td></tr>
@@ -29,29 +29,43 @@ else
             </div>
         </div>
 
-        <div class="col-md-6">
-            <div class="panel">
+        <div class="col-md-6 d-flex">
+            <div class="panel w-100">
                 <h2 class="h6">Mechanical Recommendations</h2>
                 <table class="table table-sm kv mb-0">
                     <tr><th>Shaft diameter</th><td>@r.RecommendedShaftDiameterMm.ToString("F1") mm</td></tr>
                     <tr><th>Motor rating</th><td>@r.RecommendedMotorPowerKw.ToString("F2") kW</td></tr>
                 </table>
-                @{
-                    var shaftMat = Model.Impeller?.ShaftMaterial;
-                    var opTemp = Model.FluidProperties?.OperatingTemperatureC ?? 30;
-                    var allowableMpa = AgitatorCalculationService.ComputeAllowableShearStressPa(shaftMat, opTemp) / 1_000_000.0;
-                }
-                <h3 class="h6 mt-3">Shaft Design Basis</h3>
-                <table class="table table-sm kv mb-0">
-                    <tr><th>Shaft material</th><td>@(shaftMat?.Grade ?? "Not specified")</td></tr>
-                    <tr><th>Heat treatment</th><td>@(shaftMat?.HeatTreatment ?? "Not specified")</td></tr>
-                    <tr><th>Operating temperature</th><td>@opTemp.ToString("F1") °C</td></tr>
-                    @if (shaftMat is not null)
-                    {
-                        <tr><th>Yield strength at temperature</th><td>@AgitatorCalculationService.ComputeYieldAtTemperatureMpa(shaftMat, opTemp).ToString("F1") MPa</td></tr>
-                    }
-                    <tr><th>Allowable shear stress</th><td>@allowableMpa.ToString("F1") MPa</td></tr>
-                </table>
+            </div>
+        </div>
+    </div>
+
+    var shaftMat = Model.Impeller?.ShaftMaterial;
+    var opTemp = Model.FluidProperties?.OperatingTemperatureC ?? 30;
+    var allowableMpa = AgitatorCalculationService.ComputeAllowableShearStressPa(shaftMat, opTemp) / 1_000_000.0;
+
+    <div class="row g-3 mt-0">
+        <div class="col-12">
+            <div class="panel">
+                <h2 class="h6">Shaft Design Basis</h2>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <table class="table table-sm kv mb-0">
+                            <tr><th>Shaft material</th><td>@(shaftMat?.Grade ?? "Not specified")</td></tr>
+                            <tr><th>Heat treatment</th><td>@(shaftMat?.HeatTreatment ?? "Not specified")</td></tr>
+                            <tr><th>Operating temperature</th><td>@opTemp.ToString("F1") °C</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-sm kv mb-0">
+                            @if (shaftMat is not null)
+                            {
+                                <tr><th>Yield strength at temperature</th><td>@AgitatorCalculationService.ComputeYieldAtTemperatureMpa(shaftMat, opTemp).ToString("F1") MPa</td></tr>
+                            }
+                            <tr><th>Allowable shear stress</th><td>@allowableMpa.ToString("F1") MPa</td></tr>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -160,7 +174,10 @@ else
         @if (r.CadStatus == CadJobStatus.Completed && r.CadStepFilePath != null)
         {
             <div class="alert alert-success py-2" role="alert"><i class="bi bi-check-circle"></i> 3D model generated successfully.</div>
-            <div id="viewer-container" data-step-url="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })" style="width:100%;height:500px;background:#f1f5f9;border-radius:6px;"></div>
+            <div id="viewer-container"
+                 data-step-url="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"
+                 data-preview-url="@(string.IsNullOrEmpty(r.CadPreviewMeshPath) ? null : Url.Action("PreviewMesh", "Projects", new { id = Model.Id }))"
+                 style="width:100%;height:500px;background:#f1f5f9;border-radius:6px;"></div>
             <p class="mt-2"><a href="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"><i class="bi bi-download"></i> Download STEP file</a></p>
         }
         else if (r.CadStatus == CadJobStatus.Failed)
@@ -228,7 +245,6 @@ else
     @if (r?.CadStatus == CadJobStatus.Completed && r.CadStepFilePath != null)
     {
         <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/occt-import-js.js"></script>
         <script src="~/js/step-viewer.js"></script>
     }
 }

@@ -1,17 +1,17 @@
-// CAD-style STEP viewer.
-// Parses the server-generated STEP file in the browser with occt-import-js
-// (OpenCascade WASM) and renders it with three.js (WebGL).
+// CAD preview viewer.
+// Loads the lightweight OBJ preview mesh produced by the FreeCAD job and renders it
+// with three.js (WebGL). The full STEP file is NOT parsed in the browser, because
+// parsing large STEP files with WebAssembly blocks the page for minutes.
 // No animation loop: the scene is redrawn only when the user interacts.
-// Expects: <div id="viewer-container" data-step-url="..."></div>
-// Requires (loaded before this file): three r128, OrbitControls r128, occt-import-js.
+// Expects: <div id="viewer-container" data-preview-url="..." data-step-url="..."></div>
+// Requires (loaded before this file): three r128 and OrbitControls r128.
 (function () {
     'use strict';
 
     var container = document.getElementById('viewer-container');
     if (!container) return;
 
-    var stepUrl = container.getAttribute('data-step-url');
-    var wasmBase = 'https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/';
+    var previewUrl = container.getAttribute('data-preview-url');
 
     container.style.position = 'relative';
     container.style.overflow = 'hidden';
@@ -58,26 +58,53 @@
     controls.addEventListener('change', render);
 
     // ---------- helpers ----------
-    function showError(message) {
-        container.innerHTML = '<p class="text-danger p-3 mb-0">' + message + '</p>';
+    function showMessage(message, isError) {
+        container.innerHTML = '<p class="' + (isError ? 'text-danger' : 'text-muted') +
+            ' p-3 mb-0">' + message + '</p>';
     }
 
-    function collectNames(node, names) {
-        if (!node) return;
-        if (node.meshes && node.name) {
-            node.meshes.forEach(function (i) { if (!names[i]) names[i] = node.name; });
+    // Parses the OBJ written by the FreeCAD job:
+    //   "o <name>", global "v x y z" lines, and "f a b c" triangles (1-based global indices).
+    function parseObj(text) {
+        var verts = [];
+        var objects = [];
+        var current = null;
+
+        var lines = text.split('\n');
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            var c = line.charCodeAt(0);
+
+            if (c === 118 && line.charCodeAt(1) === 32) {               // "v "
+                var v = line.split(' ');
+                verts.push(parseFloat(v[1]), parseFloat(v[2]), parseFloat(v[3]));
+            } else if (c === 102 && line.charCodeAt(1) === 32) {        // "f "
+                if (!current) { current = { name: 'Part ' + (objects.length + 1), tris: [] }; objects.push(current); }
+                var f = line.trim().split(/\s+/);
+                var a = parseInt(f[1], 10) - 1;
+                var b = parseInt(f[2], 10) - 1;
+                var d = parseInt(f[3], 10) - 1;
+                current.tris.push(a, b, d);
+            } else if (c === 111 && line.charCodeAt(1) === 32) {        // "o "
+                current = { name: line.substring(2).trim() || ('Part ' + (objects.length + 1)), tris: [] };
+                objects.push(current);
+            }
         }
-        (node.children || []).forEach(function (c) { collectNames(c, names); });
+
+        return { verts: verts, objects: objects };
     }
 
-    function buildGeometry(m) {
+    function buildGeometry(verts, tris) {
+        var positions = new Float32Array(tris.length * 3);
+        for (var i = 0; i < tris.length; i++) {
+            var vi = tris[i] * 3;
+            positions[i * 3] = verts[vi];
+            positions[i * 3 + 1] = verts[vi + 1];
+            positions[i * 3 + 2] = verts[vi + 2];
+        }
         var geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(m.attributes.position.array, 3));
-        if (m.attributes.normal) {
-            geometry.setAttribute('normal', new THREE.Float32BufferAttribute(m.attributes.normal.array, 3));
-        }
-        geometry.setIndex(new THREE.Uint32BufferAttribute(m.index.array, 1));
-        if (!m.attributes.normal) geometry.computeVertexNormals();
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.computeVertexNormals();
         geometry.computeBoundingSphere();
         return geometry;
     }
@@ -211,37 +238,32 @@
         container.appendChild(panel);
     }
 
-    // ---------- load STEP ----------
-    occtimportjs({ locateFile: function (file) { return wasmBase + file; } })
-        .then(function (occt) {
-            return fetch(stepUrl)
-                .then(function (response) {
-                    if (!response.ok) throw new Error('STEP download failed (' + response.status + ')');
-                    return response.arrayBuffer();
-                })
-                .then(function (buffer) {
-                    var result = occt.ReadStepFile(new Uint8Array(buffer), {
-                        linearUnit: 'millimeter',
-                        linearDeflectionType: 'bounding_box_ratio',
-                        linearDeflection: 0.0003,
-                        angularDeflection: 0.1
-                    });
-                    if (!result.success) throw new Error('STEP parse failed');
-                    return result;
-                });
-        })
-        .then(function (result) {
-            var names = {};
-            collectNames(result.root, names);
+    // ---------- load OBJ preview ----------
+    if (!previewUrl) {
+        showMessage('No lightweight preview is available for this model. Use "Download STEP file" below to open it in a CAD viewer.', false);
+        return;
+    }
 
-            var items = result.meshes.map(function (m, i) {
-                var geometry = buildGeometry(m);
-                return {
-                    name: m.name || names[i] || ('Part ' + (i + 1)),
+    fetch(previewUrl, { credentials: 'same-origin' })
+        .then(function (response) {
+            if (!response.ok) throw new Error('Preview download failed (' + response.status + ')');
+            return response.text();
+        })
+        .then(function (text) {
+            var parsed = parseObj(text);
+            var items = [];
+
+            parsed.objects.forEach(function (o) {
+                if (o.tris.length === 0) return;
+                var geometry = buildGeometry(parsed.verts, o.tris);
+                items.push({
+                    name: o.name,
                     geometry: geometry,
                     radius: geometry.boundingSphere ? geometry.boundingSphere.radius : 0
-                };
+                });
             });
+
+            if (items.length === 0) throw new Error('Preview contains no geometry');
 
             // Tank = part named Tank*, else the largest part.
             var tankIndex = -1;
@@ -309,8 +331,8 @@
             setView(VIEWS.iso);
         })
         .catch(function (err) {
-            console.error('STEP viewer failed:', err);
-            showError('Unable to load 3D model.');
+            console.error('CAD preview failed:', err);
+            showMessage('Unable to load the 3D preview. Use "Download STEP file" below to open the model in a CAD viewer.', true);
         });
 
     window.addEventListener('resize', function () {

@@ -105,6 +105,9 @@ namespace AgitatorDesignSuite.Web.Controllers
             if (!ModelState.IsValid)
                 return await ViewFormAsync(vm);
 
+            if (!await ValidateShaftTemperatureAsync(vm))
+                return await ViewFormAsync(vm);
+
             try
             {
                 var tenantId = await SetTenantNameAsync();
@@ -177,6 +180,9 @@ namespace AgitatorDesignSuite.Web.Controllers
             if (!ModelState.IsValid)
                 return await ViewFormAsync(vm);
 
+            if (!await ValidateShaftTemperatureAsync(vm))
+                return await ViewFormAsync(vm);
+
             try
             {
                 var userId = await GetCurrentUserAsync();
@@ -191,9 +197,11 @@ namespace AgitatorDesignSuite.Web.Controllers
                 // Recalculate since geometry/fluid inputs may have changed.
                 var project = await _uow.projectRepository.GetProjectDetailAsync(id);
                 var result = _calculationService.Calculate(project!.Vessel!, project.Impeller!, project.FluidProperties!);
+                result.ProjectId = id;
+                await _uow.calculationResultRepository.UpdateCalculationAsync(result);
 
                 TempData["Success"] = "Project updated successfully.";
-                return RedirectToAction(nameof(Detail), new { id });
+                return RedirectToAction(nameof(Results), new { id });
             }
             catch (Exception ex)
             {
@@ -279,14 +287,14 @@ namespace AgitatorDesignSuite.Web.Controllers
             {
                 var project = await _uow.projectRepository.GetProjectDetailAsync(id);
                 if (project?.Vessel is null || project.Impeller is null ||
-     project.FluidProperties is null || project.CalculationResult is null)
+                    project.FluidProperties is null || project.CalculationResult is null)
                 {
                     TempData["Error"] = "Project or calculation result not found.";
                     return RedirectToAction(nameof(Results), new { id });
                 }
 
                 var prediction = await _shaftPredictionService.PredictAsync(
-    project.Vessel, project.Impeller, project.FluidProperties, project.CalculationResult);
+                    project.Vessel, project.Impeller, project.FluidProperties, project.CalculationResult);
 
                 var json = System.Text.Json.JsonSerializer.Serialize(prediction);
                 var (success, error) = await _uow.calculationResultRepository
@@ -470,6 +478,28 @@ namespace AgitatorDesignSuite.Web.Controllers
             vm.ShaftMaterialOptions = await _uow.shaftMaterialRepository.GetAllActiveAsync();
             return View(vm);
         }
+
+        private async Task<bool> ValidateShaftTemperatureAsync(ProjectFormViewModel vm)
+        {
+            if (vm.ShaftMaterialId is null) return true;
+
+            var material = await _uow.shaftMaterialRepository.GetWithDeratingAsync(vm.ShaftMaterialId.Value);
+            if (material is null)
+            {
+                ModelState.AddModelError(nameof(vm.ShaftMaterialId), "The selected shaft material was not found.");
+                return false;
+            }
+
+            var temperature = (decimal)vm.OperatingTemperatureC;
+            if (temperature < material.MinOperatingTempC || temperature > material.MaxOperatingTempC)
+            {
+                ModelState.AddModelError(nameof(vm.OperatingTemperatureC),
+                    $"{material.DisplayName} is valid from {material.MinOperatingTempC:0.#} to " +
+                    $"{material.MaxOperatingTempC:0.#} °C. Choose another material or a different temperature.");
+                return false;
+            }
+
+            return true;
+        }
     }
-    
 }
