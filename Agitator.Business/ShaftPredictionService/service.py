@@ -90,7 +90,7 @@ def predict(req: ShaftPredictRequest):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
-        t, d, h = req.ratedTorqueNm, req.impellerDiameterM, req.liquidHeightM
+    t, d, h = req.ratedTorqueNm, req.impellerDiameterM, req.liquidHeightM
     tau_mpa = req.allowableShearStressMpa
     tau_pa = tau_mpa * 1e6
 
@@ -107,7 +107,7 @@ def predict(req: ShaftPredictRequest):
 
     notes = []
     if in_range:
-                x = torch.tensor([[t, d, h, tau_mpa]], dtype=torch.float32)
+        x = torch.tensor([[t, d, h, tau_mpa]], dtype=torch.float32)
         with torch.no_grad():
             raw_pred_m = float(model(x).item())
     else:
@@ -125,7 +125,7 @@ def predict(req: ShaftPredictRequest):
     # gap on raw (unrounded) values so it is not hidden by standard sizes
     gap_pct = (raw_pred_m - raw_formula_unrounded_m) / raw_formula_unrounded_m * 100.0
 
-        stress_pa = combined_shear_stress_pa(t, d, h, pred_std_m)
+    stress_pa = combined_shear_stress_pa(t, d, h, pred_std_m)
     if stress_pa > tau_pa:
         notes.append("Shear stress exceeds allowable at predicted size.")
     if pred_std_m != formula_std_m:
