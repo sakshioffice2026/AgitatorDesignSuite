@@ -95,6 +95,11 @@ namespace Agitator.Business.Services
             job.CadStatus = CadJobStatus.Running;
             await db.SaveChangesAsync(ct);
 
+            var previousFeaJson = job.FeaCheckJson;
+            var previousFeaCheckedAt = job.FeaCheckedAt;
+
+            var feaTask = RunFeaCheckSafeAsync(job, ct);
+
             try
             {
                 var (stepPath, meshPath) = await RunFreeCadAsync(job, ct);
@@ -109,8 +114,13 @@ namespace Agitator.Business.Services
                 job.CadJobError = ex.Message;
             }
 
-            if (job.CadStatus == CadJobStatus.Completed)
-                await RunFeaCheckSafeAsync(job, ct);
+            await feaTask;
+
+            if (job.CadStatus != CadJobStatus.Completed)
+            {
+                job.FeaCheckJson = previousFeaJson;
+                job.FeaCheckedAt = previousFeaCheckedAt;
+            }
             await db.SaveChangesAsync(ct);
         }
 
