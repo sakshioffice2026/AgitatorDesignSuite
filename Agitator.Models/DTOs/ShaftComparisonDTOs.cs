@@ -14,6 +14,10 @@ namespace Agitator.Models.DTOs
         /// <summary>Allowed gap (%) between PINN and the reference for angle of twist.</summary>
         public double TwistTolerancePercent { get; set; } = 5.0;
 
+
+        /// <summary>Allowed gap (%) between PINN and the reference for stresses. Stress scales with 1/d^3, so this is wider than the diameter tolerance.</summary>
+        public double StressTolerancePercent { get; set; } = 15.0;
+
         /// <summary>Tip deflection limit as a fraction of shaft length (0.001 = 1 mm per metre).</summary>
         public double DeflectionLimitRatio { get; set; } = 0.001;
 
@@ -144,6 +148,13 @@ namespace Agitator.Models.DTOs
         public double CapacityValue { get; set; }
         public string Source { get; set; } = string.Empty;
 
+
+        /// <summary>Column heading for DemandValue in the view.</summary>
+        public string DemandLabel { get; set; } = "Used";
+
+        /// <summary>Column heading for CapacityValue in the view.</summary>
+        public string CapacityLabel { get; set; } = "Allowed";
+
         /// <summary>Demand divided by capacity. 1.0 means the check is exactly at its limit.</summary>
         public double Utilization => CapacityValue > 0 ? DemandValue / CapacityValue : double.PositiveInfinity;
 
@@ -160,6 +171,10 @@ namespace Agitator.Models.DTOs
         public bool FeaAvailable { get; set; }
         public string ModelVersion { get; set; } = string.Empty;
         public double PdeResidual { get; set; }
+
+
+        /// <summary>True when the PINN was skipped (inputs outside the trained range). PINN columns are then empty.</summary>
+        public bool PinnSkipped { get; set; }
         public DateTime GeneratedAtUtc { get; set; }
 
         public List<ShaftQuantityComparison> Quantities { get; set; } = new();

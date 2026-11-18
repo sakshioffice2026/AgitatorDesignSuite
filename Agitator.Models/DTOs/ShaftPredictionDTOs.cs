@@ -130,6 +130,10 @@ namespace Agitator.Models.DTOs
         public double ShaftLengthM { get; set; }
         public double OperatingSpeedRpm { get; set; }
 
+
+        /// <summary>False when the inputs were outside the trained range and the PINN was skipped (formula values returned instead).</summary>
+        public bool WithinTrustedRange { get; set; } = true;
+
         /// <summary>PINN deflection, twist, stresses, critical speed and fatigue factors from the Python service (null for results saved before this feature).</summary>
         public ShaftPhysicsServiceBlock? Physics { get; set; }
 

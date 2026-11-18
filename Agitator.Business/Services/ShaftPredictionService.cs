@@ -1,5 +1,4 @@
 ﻿using System.Net.Http.Json;
-using System.Text.Json;
 using Agitator.Business.Contracts;
 using Agitator.Core.Entities;
 using Agitator.Models.DTOs;
@@ -11,24 +10,22 @@ namespace Agitator.Business.Services
     /// <summary>
     /// Calls the Python PINN service (POST /predict), cross-checks the answer against the
     /// trusted formula result and sets the trusted flag. Never replaces the formula result.
+    /// FEA and tolerance checks are judged later, when the comparison is built.
     /// Registered as a typed HttpClient.
     /// </summary>
     public class ShaftPredictionService : IShaftPredictionService
     {
         private readonly HttpClient _httpClient;
         private readonly ShaftPredictionOptions _options;
-        private readonly ShaftComparisonOptions _comparison;
         private readonly ILogger<ShaftPredictionService> _logger;
 
         public ShaftPredictionService(
             HttpClient httpClient,
             IOptions<ShaftPredictionOptions> options,
-            IOptions<ShaftComparisonOptions> comparison,
             ILogger<ShaftPredictionService> logger)
         {
             _httpClient = httpClient;
             _options = options.Value;
-            _comparison = comparison.Value;
             _logger = logger;
         }
 
@@ -75,13 +72,16 @@ namespace Agitator.Business.Services
 
             var response = await CallServiceAsync(request, cancellationToken);
 
-            // Formula result from the existing .NET engine (includes Km = 1.5).
+            // Standard size recommended by the .NET engine (stress, deflection, critical speed, fatigue).
             double dotNetFormulaMm = calculation.RecommendedShaftDiameterMm;
-            var physics = response.Physics;
-            var fea = ReadFea(calculation.FeaCheckJson);
 
-            double gapPercent = dotNetFormulaMm > 0
-                ? (response.RawPredictedDiameterMm - dotNetFormulaMm) / dotNetFormulaMm * 100.0
+            // Raw (unrounded) stress-only formula diameter from the service, the same basis as its PINN fallback.
+            double rawFormulaMm = response.RawFormulaDiameterMm > 0
+                ? response.RawFormulaDiameterMm
+                : dotNetFormulaMm;
+
+            double gapPercent = rawFormulaMm > 0
+                ? (response.RawPredictedDiameterMm - rawFormulaMm) / rawFormulaMm * 100.0
                 : response.GapPercent;
 
             var notes = new List<string>();
@@ -95,38 +95,6 @@ namespace Agitator.Business.Services
             if (response.ShearStressMpa > response.AllowableShearStressMpa)
             {
                 isTrusted = false;
-            }
-
-            if (fea is not null)
-            {
-                // Trust is judged against FEA first.
-                if (physics is null)
-                {
-                    isTrusted = false;
-                    notes.Add("Service returned no physics block; PINN cannot be compared with FEA.");
-                }
-                else
-                {
-                    isTrusted &= WithinFea("Tip deflection", physics.TipDeflectionMm, fea.TipDeflectionMm,
-                        _comparison.DeflectionTolerancePercent, notes);
-                    isTrusted &= WithinFea("Angle of twist", physics.TwistDeg, fea.TwistDeg,
-                        _comparison.TwistTolerancePercent, notes);
-                    isTrusted &= WithinFea("Von Mises stress", physics.VonMisesStressMpa, fea.VonMisesMpa,
-                        _comparison.DiameterTolerancePercent, notes);
-                    isTrusted &= WithinFea("Max shear stress", physics.MaxShearStressMpa, fea.MaxShearMpa,
-                        _comparison.DiameterTolerancePercent, notes);
-                }
-            }
-            else
-            {
-                // No FEA: fall back to the formula.
-                notes.Add("FEA result not available; PINN judged against the formula only.");
-
-                if (Math.Abs(gapPercent) > _options.TolerancePercent)
-                {
-                    isTrusted = false;
-                    notes.Add($"Gap to formula {gapPercent:0.##} % exceeds tolerance {_options.TolerancePercent:0.##} %.");
-                }
             }
 
             // The Python formula must agree with the .NET formula. If not, units or constants differ.
@@ -143,7 +111,7 @@ namespace Agitator.Business.Services
 
             return new ShaftPredictionResult
             {
-                RawFormulaDiameterMm = dotNetFormulaMm,
+                RawFormulaDiameterMm = rawFormulaMm,
                 FormulaShaftDiameterMm = dotNetFormulaMm,
                 PredictedShaftDiameterMm = response.PredictedShaftDiameterMm,
                 RawPredictedDiameterMm = response.RawPredictedDiameterMm,
@@ -164,45 +132,9 @@ namespace Agitator.Business.Services
                 ShaftLengthM = response.ShaftLengthM > 0
                     ? response.ShaftLengthM
                     : AgitatorCalculationService.ComputeShaftLengthM(vessel.LiquidHeightM),
-                Physics = response.Physics
+                Physics = response.Physics,
+                WithinTrustedRange = response.WithinTrustedRange
             };
-        }
-
-        private static bool WithinFea(
-            string name,
-            double? pinn,
-            double? fea,
-            double tolerancePercent,
-            List<string> notes)
-        {
-            double? gap = ShaftComparisonMath.PercentDifference(pinn, fea);
-
-            if (!gap.HasValue || Math.Abs(gap.Value) <= tolerancePercent)
-            {
-                return true;
-            }
-
-            notes.Add($"{name}: PINN differs from FEA by {gap.Value:0.##} % (limit {tolerancePercent:0.##} %).");
-            return false;
-        }
-
-        private ShaftFeaResult? ReadFea(string? json)
-        {
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                return null;
-            }
-
-            try
-            {
-                var fea = JsonSerializer.Deserialize<ShaftFeaResult>(json);
-                return fea is not null && fea.IsOk ? fea : null;
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogWarning(ex, "FEA result JSON could not be read.");
-                return null;
-            }
         }
 
         private async Task<ShaftPredictionServiceResponse> CallServiceAsync(

@@ -266,7 +266,7 @@ namespace AgitatorDesignSuite.Web.Controllers
                 SetBreadcrumb(
                     new BreadcrumbItem { Text = "Dashboard", Url = Url.Action("Index", "Home") },
                     new BreadcrumbItem { Text = "Projects", Url = Url.Action("Index") },
-                    new BreadcrumbItem { Text = $"{project.Name} � Results", IsActive = true });
+                                        new BreadcrumbItem { Text = $"{project.Name} - Results", IsActive = true });
 
                 var comparison = BuildComparison(project);
                 var vm = MapToDetailViewModel(project);
@@ -507,7 +507,8 @@ namespace AgitatorDesignSuite.Web.Controllers
                 project.Vessel, project.Impeller, project.FluidProperties, project.CalculationResult, prediction);
 
             if (!comparison.AllChecksPassed && prediction is not null &&
-                prediction.PredictedShaftDiameterMm > project.CalculationResult.RecommendedShaftDiameterMm)
+     prediction.WithinTrustedRange && prediction.IsTrusted && comparison.AllQuantitiesAgree &&
+     prediction.PredictedShaftDiameterMm > project.CalculationResult.RecommendedShaftDiameterMm)
             {
                 project.CalculationResult.RecommendedShaftDiameterMm = prediction.PredictedShaftDiameterMm;
                 comparison = _calculationService.BuildShaftComparison(

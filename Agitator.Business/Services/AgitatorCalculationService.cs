@@ -256,7 +256,7 @@ namespace Agitator.Business.Services
         /// M = bending moment from hydraulic radial force over shaft length.
         /// Result is rounded up to the next standard shaft size.
         /// </summary>
-        private static double RawStressDiameterM(Vessel vessel, Impeller impeller, double ratedTorqueNm, double allowableShearPa)
+        private static double RawStressDiameterM(Vessel vessel, Impeller impeller, double ratedTorqueNm, double allowableShearPa, double bendingFactor = BendingFactorKm)
         {
             double designTorque = ratedTorqueNm * MotorServiceFactor;
 
@@ -268,7 +268,7 @@ namespace Agitator.Business.Services
             double bendingMoment = radialForce * shaftLengthM;
 
             double equivalentTorque = Math.Sqrt(
-                Math.Pow(BendingFactorKm * bendingMoment, 2) +
+                                Math.Pow(bendingFactor * bendingMoment, 2) +
                 Math.Pow(TorsionFactorKt * designTorque, 2));
 
             return Math.Cbrt(16.0 * equivalentTorque / (Math.PI * allowableShearPa));
@@ -333,6 +333,44 @@ namespace Agitator.Business.Services
             }
 
             return Math.Max(stressM, hi) * 1000.0;
+        }
+
+
+        /// <summary>Smallest diameter (mm) for which the check passes. Bisection from 1 mm to 5 m.</summary>
+        private static double BisectMinDiameterMm(Func<double, bool> passes)
+        {
+            double lo = 0.001;
+            double hi = 5.0;
+
+            if (passes(lo)) return lo * 1000.0;
+
+            for (int i = 0; i < 60; i++)
+            {
+                double mid = 0.5 * (lo + hi);
+                if (passes(mid)) hi = mid;
+                else lo = mid;
+            }
+
+            return hi * 1000.0;
+        }
+
+        /// <summary>Smallest diameter (mm) that keeps tip deflection inside the limit and operating speed inside the critical speed ratio.</summary>
+        private double ComputeDeflectionCriticalDiameterMm(
+            Vessel vessel, Impeller impeller, double ratedTorqueNm, double temperatureC)
+        {
+            return BisectMinDiameterMm(d =>
+                PassesDesignChecks(vessel, impeller, ratedTorqueNm, d, temperatureC, false));
+        }
+
+        /// <summary>Smallest diameter (mm) that keeps operating speed inside the critical speed ratio.</summary>
+        private double ComputeCriticalSpeedDiameterMm(
+            Vessel vessel, Impeller impeller, double ratedTorqueNm, double temperatureC)
+        {
+            return BisectMinDiameterMm(d =>
+            {
+                var p = ComputeManualPhysics(vessel, impeller, ratedTorqueNm, d, temperatureC);
+                return impeller.RotationalSpeedRpm <= _comparison.MaxCriticalSpeedRatio * p.CriticalSpeedRpm;
+            });
         }
 
         /// <summary>Design torque (N*m) = rated torque x motor service factor.</summary>
@@ -555,17 +593,27 @@ namespace Agitator.Business.Services
             var manual = ComputeManualPhysics(vessel, impeller, calculation.TorqueNm, diameterM, fluid.OperatingTemperatureC);
 
             var fea = ReadFea(calculation.FeaCheckJson);
-            var pinn = prediction?.Physics;
-            bool pinnTrusted = prediction is not null && pinn is not null && prediction.IsTrusted;
+            // PINN values are used only when the inputs were inside the trained range.
+            var pinn = prediction is not null && prediction.WithinTrustedRange ? prediction.Physics : null;
+            bool pinnUsable = pinn is not null;
+            bool pinnTrusted = pinnUsable && prediction!.IsTrusted;
 
             double allowableShearMpa =
                 ComputeAllowableShearStressPa(impeller.ShaftMaterial, fluid.OperatingTemperatureC) / 1e6;
             double shaftLengthM = ComputeShaftLengthM(vessel.LiquidHeightM);
 
+            // FEA covers stress and deflection; critical speed is not an FEA result, so the manual value is used for it.
+            double limitDeflectionMm = _comparison.DeflectionLimitRatio * shaftLengthM * 1000.0;
             double? feaDiameterMm = null;
             if (fea is not null && fea.MaxShearMpa is double feaShear && feaShear > 0 && allowableShearMpa > 0)
             {
-                feaDiameterMm = calculation.RecommendedShaftDiameterMm * Math.Cbrt(feaShear / allowableShearMpa);
+                double fromStress = calculation.RecommendedShaftDiameterMm * Math.Cbrt(feaShear / allowableShearMpa);
+                double fromDeflection = fea.TipDeflectionMm is double feaDefl && feaDefl > 0 && limitDeflectionMm > 0
+                    ? calculation.RecommendedShaftDiameterMm * Math.Pow(feaDefl / limitDeflectionMm, 0.25)
+                    : 0.0;
+                double fromCritical = ComputeCriticalSpeedDiameterMm(
+                    vessel, impeller, calculation.TorqueNm, fluid.OperatingTemperatureC);
+                feaDiameterMm = Math.Max(fromStress, Math.Max(fromDeflection, fromCritical));
             }
 
             var result = new ShaftComparisonResult
@@ -574,18 +622,31 @@ namespace Agitator.Business.Services
                 FeaAvailable = fea is not null,
                 ModelVersion = prediction?.ModelVersion ?? string.Empty,
                 PdeResidual = pinn?.PdeResidual ?? 0.0,
-                GeneratedAtUtc = DateTime.UtcNow
+                PinnSkipped = prediction is not null && !prediction.WithinTrustedRange,
             };
 
             // ---- Side-by-side quantities: manual, FEA, PINN ----
+            // Same basis for all three: plain beam theory (Km = 1) with stress, deflection and critical speed.
+            double analyticStressMm = RawStressDiameterM(
+                vessel, impeller, calculation.TorqueNm, allowableShearMpa * 1e6, 1.0) * 1000.0;
+            double deflectionCriticalMm = ComputeDeflectionCriticalDiameterMm(
+                vessel, impeller, calculation.TorqueNm, fluid.OperatingTemperatureC);
+
             result.Quantities.Add(new ShaftQuantityComparison
             {
                 Name = "Shaft diameter (before rounding)",
                 Unit = "mm",
+                Manual = Math.Max(analyticStressMm, deflectionCriticalMm),
+                Fea = feaDiameterMm,
+                Pinn = pinnUsable ? prediction!.RawPredictedDiameterMm : null,
+                TolerancePercent = _comparison.DiameterTolerancePercent
+            });
+            result.Quantities.Add(new ShaftQuantityComparison
+            {
+                Name = "Shaft diameter, design formula Km 1.5 (before rounding)",
+                Unit = "mm",
                 Manual = ComputeRequiredRawDiameterMm(
                     vessel, impeller, calculation.TorqueNm, allowableShearMpa * 1e6, fluid.OperatingTemperatureC),
-                Fea = feaDiameterMm,
-                Pinn = prediction?.RawPredictedDiameterMm,
                 TolerancePercent = _comparison.DiameterTolerancePercent
             });
             result.Quantities.Add(new ShaftQuantityComparison
@@ -613,7 +674,7 @@ namespace Agitator.Business.Services
                 Manual = manual.MaxShearMpa,
                 Fea = fea?.MaxShearMpa,
                 Pinn = pinn?.MaxShearStressMpa,
-                TolerancePercent = _comparison.DiameterTolerancePercent
+                TolerancePercent = _comparison.StressTolerancePercent
             });
             result.Quantities.Add(new ShaftQuantityComparison
             {
@@ -622,8 +683,12 @@ namespace Agitator.Business.Services
                 Manual = manual.VonMisesMpa,
                 Fea = fea?.VonMisesMpa,
                 Pinn = pinn?.VonMisesStressMpa,
-                TolerancePercent = _comparison.DiameterTolerancePercent
+                TolerancePercent = _comparison.StressTolerancePercent
             });
+
+
+            // PINN values drive a check only when the inputs were in range and every quantity agrees with the reference.
+            pinnTrusted = pinnTrusted && !result.Quantities.Any(q => q.PinnAgrees == false);
 
             // ---- Design checks: FEA first, then trusted PINN, then manual ----
             (double Value, string Source) Pick(double? feaValue, double? pinnValue, double manualValue)
@@ -663,7 +728,9 @@ namespace Agitator.Business.Services
                 Unit = "rpm",
                 DemandValue = impeller.RotationalSpeedRpm,
                 CapacityValue = _comparison.MaxCriticalSpeedRatio * critical.Value,
-                Source = critical.Source
+                Source = critical.Source,
+                DemandLabel = "Operating",
+                CapacityLabel = $"Allowed ({_comparison.MaxCriticalSpeedRatio * 100.0:0} % of critical)"
             });
 
             var goodman = Pick(null, pinn?.GoodmanFactor, manual.GoodmanFactor);
@@ -674,22 +741,33 @@ namespace Agitator.Business.Services
                 Unit = "factor",
                 DemandValue = _comparison.RequiredFatigueFactor,
                 CapacityValue = Math.Min(goodman.Value, MaxReportedFactor),
-                Source = goodman.Source
+                Source = goodman.Source,
+                DemandLabel = "Required",
+                CapacityLabel = "Achieved"
             });
 
             // ---- Notes ----
-            if (fea is null)
-            {
-                result.Notes.Add("FEA result not available; checks use PINN (when trusted) or manual values.");
-            }
-
             if (prediction is null)
             {
                 result.Notes.Add("PINN prediction not available.");
             }
-            else if (!prediction.IsTrusted)
+            else if (!prediction.WithinTrustedRange)
+            {
+                result.Notes.Add("PINN skipped: inputs are outside the trained range. Checks use FEA or manual values.");
+            }
+            else if (!pinnTrusted)
             {
                 result.Notes.Add("PINN result is not trusted; checks use FEA or manual values.");
+            }
+
+            result.Notes.Add(fea is null
+                ? "FEA result not available; PINN judged against the manual calculation."
+                : "PINN judged against FEA.");
+
+            foreach (var q in result.Quantities.Where(q => q.PinnAgrees == false))
+            {
+                double? gap = ShaftComparisonMath.PercentDifference(q.Pinn, q.Reference);
+                result.Notes.Add($"{q.Name}: PINN differs from {q.ReferenceName} by {gap:+0.##;-0.##} % (limit {q.TolerancePercent:0.##} %).");
             }
 
             if (prediction is not null && !string.IsNullOrWhiteSpace(prediction.Notes))

@@ -19,25 +19,39 @@
 }
 else
 {
-    @if (Model.OverallPassed)
+    @if (!Model.AllChecksPassed)
+    {
+        <div class="alert alert-danger py-2" role="alert">
+            <i class="bi bi-x-circle-fill"></i>
+            At least one design check fails for a @Model.StandardShaftSizeMm.ToString("F0") mm shaft. Ask an engineer to review before use.
+        </div>
+    }
+    else if (Model.PinnSkipped)
+    {
+        <div class="alert alert-info py-2" role="status">
+            <i class="bi bi-info-circle-fill"></i>
+            All design checks pass for a @Model.StandardShaftSizeMm.ToString("F0") mm shaft. The PINN (AI) was skipped because the inputs are outside its trained range, so these results use FEA or manual values.
+        </div>
+    }
+    else if (string.IsNullOrWhiteSpace(Model.ModelVersion))
+    {
+        <div class="alert alert-info py-2" role="status">
+            <i class="bi bi-info-circle-fill"></i>
+            All design checks pass for a @Model.StandardShaftSizeMm.ToString("F0") mm shaft. No PINN (AI) prediction has been generated yet. Click "Generate Shaft Prediction (PINN)" below to add the AI comparison.
+        </div>
+    }
+    else if (Model.OverallPassed)
     {
         <div class="alert alert-success py-2" role="status">
             <i class="bi bi-check-circle-fill"></i>
             All design checks pass and the PINN (AI) result agrees with the reference. Shaft size to use: @Model.StandardShaftSizeMm.ToString("F0") mm.
         </div>
     }
-    else if (Model.AllChecksPassed)
+    else
     {
         <div class="alert alert-warning py-2" role="alert">
             <i class="bi bi-exclamation-triangle-fill"></i>
-            All design checks pass, but the PINN (AI) result is outside the allowed gap. Use the formula result and ask an engineer to review.
-        </div>
-    }
-    else
-    {
-        <div class="alert alert-danger py-2" role="alert">
-            <i class="bi bi-x-circle-fill"></i>
-            At least one design check fails for a @Model.StandardShaftSizeMm.ToString("F0") mm shaft. Ask an engineer to review before use.
+            All design checks pass, but the PINN (AI) result is outside the allowed gap. Use the manual result and ask an engineer to review.
         </div>
     }
 
@@ -62,11 +76,15 @@ else
                         <th>@q.Name <span class="text-muted small">(@q.Unit)</span></th>
                         <td class="text-end">@Fmt(q.Manual)</td>
                         <td class="text-end">@Fmt(q.Fea)</td>
-                        <td class="text-end">@Fmt(q.Pinn)</td>
-                        <td class="text-end">@FmtPercent(q.Fea.HasValue ? q.PinnVsFeaPercent : q.PinnVsManualPercent)</td>
+                        <td class="text-end">@(Model.PinnSkipped ? "skipped" : Fmt(q.Pinn))</td>
+                        <td class="text-end">@(Model.PinnSkipped ? "n/a" : FmtPercent(q.Fea.HasValue ? q.PinnVsFeaPercent : q.PinnVsManualPercent))</td>
                         <td>@q.ReferenceName <span class="text-muted small">(limit @q.TolerancePercent.ToString("0.##") %)</span></td>
                         <td>
-                            @if (q.PinnAgrees is null)
+                            @if (Model.PinnSkipped)
+                            {
+                                <span class="badge bg-secondary">Skipped</span>
+                            }
+                            else if (q.PinnAgrees is null)
                             {
                                 <span class="badge bg-secondary">n/a</span>
                             }
@@ -95,8 +113,8 @@ else
             <thead>
                 <tr>
                     <th>Check</th>
-                    <th class="text-end">Used</th>
-                    <th class="text-end">Allowed</th>
+                    <th class="text-end">Value</th>
+                    <th class="text-end">Limit</th>
                     <th style="min-width:140px;">Utilisation</th>
                     <th class="text-end">Margin</th>
                     <th>Result</th>
@@ -108,9 +126,9 @@ else
                     double pct = double.IsInfinity(c.Utilization) ? 100.0 : Math.Min(c.Utilization * 100.0, 100.0);
                     string barClass = !c.Passed ? "bg-danger" : c.Utilization > 0.85 ? "bg-warning" : "bg-success";
                     <tr>
-                        <th>@c.Name <span class="text-muted small">(@c.Unit)</span></th>
-                        <td class="text-end">@Fmt(c.DemandValue)</td>
-                        <td class="text-end">@Fmt(c.CapacityValue)</td>
+                        <th>@c.Name <span class="text-muted small">(@c.Unit)</span> <span class="badge bg-light text-dark border">@c.Source</span></th>
+                        <td class="text-end">@Fmt(c.DemandValue)<div class="text-muted small">@c.DemandLabel</div></td>
+                        <td class="text-end">@Fmt(c.CapacityValue)<div class="text-muted small">@c.CapacityLabel</div></td>
                         <td>
                             <div class="progress" style="height:10px;" role="progressbar"
                                  aria-label="@c.Name utilisation"
@@ -146,14 +164,19 @@ else
 
     <p class="text-muted small mb-1">Shafts come in fixed sizes, so the exact calculated size is moved up to the next available size.</p>
     <p class="text-muted small mb-2">
-        Model version @Model.ModelVersion, PDE residual @Model.PdeResidual.ToString("0.###e+0"),
+        Model version @Model.ModelVersion, PDE residual @(Model.PinnSkipped ? "n/a" : Model.PdeResidual.ToString("0.###e+0")),
         generated @Model.GeneratedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC
     </p>
 
     @if (Model.Notes.Count > 0)
     {
         <div class="alert alert-secondary py-2 mb-0" role="note">
-            @string.Join(" ", Model.Notes)
+            <ul class="mb-0 ps-3">
+                @foreach (var note in Model.Notes)
+                {
+                    <li>@note</li>
+                }
+            </ul>
         </div>
     }
 }

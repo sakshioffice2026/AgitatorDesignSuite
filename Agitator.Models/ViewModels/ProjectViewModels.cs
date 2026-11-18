@@ -82,7 +82,7 @@ namespace Agitator.Models.ViewModel
         [Display(Name = "Number of impellers")]
         public int NumberOfImpellers { get; set; } = 1;
 
-        [Range(0, 50000)]
+        [Range(1, 50000, ErrorMessage = "Impeller mass must be between 1 and 50000 kg. The critical speed check needs a real impeller mass.")]
         [Display(Name = "Impeller mass (kg)")]
         public double ImpellerMassKg { get; set; } = 20;
 
