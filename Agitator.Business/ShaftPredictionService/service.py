@@ -98,6 +98,7 @@ class ShaftPredictRequest(BaseModel):
     ultimateStrengthMpa: float = Field(0.0, ge=0)
     enduranceLimitMpa: float = Field(0.0, ge=0)
     surfaceFinish: str = "machined"
+    shaftDiameterMm: float = Field(0.0, ge=0)
 
 
 class ShaftPhysicsBlock(BaseModel):
@@ -179,6 +180,7 @@ def predict(req: ShaftPredictRequest):
     raw_formula_unrounded_m = raw_shaft_diameter_m(t, d, h, tau_pa)
     formula_std_m = formula_shaft_diameter_m(t, d, h, tau_pa)
     length_m = shaft_length_m(h)
+    check_std_m = req.shaftDiameterMm / 1000.0 if req.shaftDiameterMm > 0 else formula_std_m
 
     p = make_params(t, d, h, tau_mpa, req.operatingSpeedRpm, req.impellerMassKg,
                     req.elasticModulusGpa, req.densityKgM3)
@@ -206,14 +208,14 @@ def predict(req: ShaftPredictRequest):
     stress_pa = combined_shear_stress_pa(t, d, h, pred_std_m)
     if stress_pa > tau_pa:
         notes.append("Shear stress exceeds allowable at predicted size.")
-    if pred_std_m != formula_std_m:
-        notes.append("Predicted standard size differs from formula standard size.")
+    if pred_std_m != check_std_m:
+        notes.append("Predicted standard size differs from recommended standard size.")
 
-    # ---- Physics block at the formula standard size (the size the FEA check uses) ----
+    # ---- Physics block at the recommended standard size (the size the checks use) ----
     design_t = design_torque_nm(t)
     if in_range:
         with torch.no_grad():
-            ev = evaluate_design(model, p, d_m=formula_std_m, nu=req.poissonRatio)
+            ev = evaluate_design(model, p, d_m=check_std_m, nu=req.poissonRatio)
         moment_nm = float(ev["root_moment_nm"].item())
         tip_defl_m = float(ev["tip_deflection_m"].item())
         twist_rad = float(ev["tip_twist_rad"].item())
@@ -226,15 +228,15 @@ def predict(req: ShaftPredictRequest):
         g_pa = e_pa / (2.0 * (1.0 + req.poissonRatio))
         force_n = radial_force_n(t, d)
         moment_nm = bending_moment_nm(t, d, h)
-        tip_defl_m = analytic_tip_deflection_m(force_n, length_m, e_pa, formula_std_m)
-        twist_rad = analytic_twist_rad(design_t, length_m, g_pa, formula_std_m)
-        tau_max_pa = tresca_shear_stress_pa(moment_nm, design_t, formula_std_m)
-        von_mises_pa = von_mises_stress_pa(moment_nm, design_t, formula_std_m)
-        crit_rpm = critical_speed_rpm(formula_std_m, length_m, req.impellerMassKg, e_pa,
+        tip_defl_m = analytic_tip_deflection_m(force_n, length_m, e_pa, check_std_m)
+        twist_rad = analytic_twist_rad(design_t, length_m, g_pa, check_std_m)
+        tau_max_pa = tresca_shear_stress_pa(moment_nm, design_t, check_std_m)
+        von_mises_pa = von_mises_stress_pa(moment_nm, design_t, check_std_m)
+        crit_rpm = critical_speed_rpm(check_std_m, length_m, req.impellerMassKg, e_pa,
                                       req.densityKgM3, method="closed_form")
         pde = 0.0
 
-    goodman, soderberg, yield_f = _fatigue_factors(req, moment_nm, design_t, formula_std_m)
+    goodman, soderberg, yield_f = _fatigue_factors(req, moment_nm, design_t, check_std_m)
 
     physics = ShaftPhysicsBlock(
         tipDeflectionMm=tip_defl_m * 1000.0,

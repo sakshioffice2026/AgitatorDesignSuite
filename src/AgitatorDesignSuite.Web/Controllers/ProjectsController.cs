@@ -1,4 +1,4 @@
-using Agitator.Business.Contracts;
+ï»¿using Agitator.Business.Contracts;
 using Agitator.Business.Services;
 using Agitator.Core.Entities;
 using Agitator.Models.DTOs;
@@ -266,10 +266,11 @@ namespace AgitatorDesignSuite.Web.Controllers
                 SetBreadcrumb(
                     new BreadcrumbItem { Text = "Dashboard", Url = Url.Action("Index", "Home") },
                     new BreadcrumbItem { Text = "Projects", Url = Url.Action("Index") },
-                    new BreadcrumbItem { Text = $"{project.Name} — Results", IsActive = true });
+                    new BreadcrumbItem { Text = $"{project.Name} ï¿½ Results", IsActive = true });
 
+                var comparison = BuildComparison(project);
                 var vm = MapToDetailViewModel(project);
-                vm.ShaftComparison = BuildComparison(project);
+                vm.ShaftComparison = comparison;
                 return View(vm);
             }
             catch (Exception ex)
@@ -305,8 +306,8 @@ namespace AgitatorDesignSuite.Web.Controllers
 
                 if (success)
                 {
-                    var comparison = _calculationService.BuildShaftComparison(
-                        project.Vessel, project.Impeller, project.FluidProperties, project.CalculationResult, prediction);
+                    project.CalculationResult.PredictionJson = json;
+                    var comparison = BuildComparison(project)!;
 
                     (success, error) = await _uow.calculationResultRepository.SetComparisonAsync(
                         id,
@@ -395,7 +396,7 @@ namespace AgitatorDesignSuite.Web.Controllers
         // GET: /Projects/DownloadCadStep/5
         // Streams the FreeCAD-generated STEP file over HTTP. Needed because
         // the file lives on the server's local disk (CadIntegrationOptions
-        // .OutputDirectory) — browsers block file:// links to local paths,
+        // .OutputDirectory) ï¿½ browsers block file:// links to local paths,
         // so the raw CadStepFilePath can never be used directly as an <a href>.
         public async Task<IActionResult> DownloadCadStep(int id)
         {
@@ -450,7 +451,7 @@ namespace AgitatorDesignSuite.Web.Controllers
         // GET: /Projects/PreviewMesh/5
         // Serves the FreeCAD-generated OBJ preview mesh over HTTP (inline,
         // not as an attachment) so the browser-side Three.js OBJLoader can
-        // fetch it via XHR — same file:// restriction as DownloadCadStep,
+        // fetch it via XHR ï¿½ same file:// restriction as DownloadCadStep,
         // just returned without a Content-Disposition download prompt.
         public async Task<IActionResult> PreviewMesh(int id)
         {
@@ -502,8 +503,18 @@ namespace AgitatorDesignSuite.Web.Controllers
                 }
             }
 
-            return _calculationService.BuildShaftComparison(
+            var comparison = _calculationService.BuildShaftComparison(
                 project.Vessel, project.Impeller, project.FluidProperties, project.CalculationResult, prediction);
+
+            if (!comparison.AllChecksPassed && prediction is not null &&
+                prediction.PredictedShaftDiameterMm > project.CalculationResult.RecommendedShaftDiameterMm)
+            {
+                project.CalculationResult.RecommendedShaftDiameterMm = prediction.PredictedShaftDiameterMm;
+                comparison = _calculationService.BuildShaftComparison(
+                    project.Vessel, project.Impeller, project.FluidProperties, project.CalculationResult, prediction);
+            }
+
+            return comparison;
         }
 
         private static ProjectFormViewModel MapToFormViewModel(Project project)
@@ -551,7 +562,7 @@ namespace AgitatorDesignSuite.Web.Controllers
             {
                 ModelState.AddModelError(nameof(vm.OperatingTemperatureC),
                     $"{material.DisplayName} is valid from {material.MinOperatingTempC:0.#} to " +
-                    $"{material.MaxOperatingTempC:0.#} °C. Choose another material or a different temperature.");
+                    $"{material.MaxOperatingTempC:0.#} ï¿½C. Choose another material or a different temperature.");
                 return false;
             }
 

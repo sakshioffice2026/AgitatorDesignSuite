@@ -69,7 +69,8 @@ namespace Agitator.Business.Services
                 YieldStrengthMpa = yieldAtTempMpa,
                 UltimateStrengthMpa = ultimateMpa,
                 EnduranceLimitMpa = (double?)material?.EnduranceLimitMpa ?? 0.5 * ultimateMpa,
-                SurfaceFinish = material?.SurfaceFinish ?? "machined"
+                SurfaceFinish = material?.SurfaceFinish ?? "machined",
+                ShaftDiameterMm = calculation.RecommendedShaftDiameterMm
             };
 
             var response = await CallServiceAsync(request, cancellationToken);
@@ -78,6 +79,10 @@ namespace Agitator.Business.Services
             double dotNetFormulaMm = calculation.RecommendedShaftDiameterMm;
             var physics = response.Physics;
             var fea = ReadFea(calculation.FeaCheckJson);
+
+            double gapPercent = dotNetFormulaMm > 0
+                ? (response.RawPredictedDiameterMm - dotNetFormulaMm) / dotNetFormulaMm * 100.0
+                : response.GapPercent;
 
             var notes = new List<string>();
             bool isTrusted = true;
@@ -117,18 +122,18 @@ namespace Agitator.Business.Services
                 // No FEA: fall back to the formula.
                 notes.Add("FEA result not available; PINN judged against the formula only.");
 
-                if (Math.Abs(response.GapPercent) > _options.TolerancePercent)
+                if (Math.Abs(gapPercent) > _options.TolerancePercent)
                 {
                     isTrusted = false;
-                    notes.Add($"Gap to formula {response.GapPercent:0.##} % exceeds tolerance {_options.TolerancePercent:0.##} %.");
+                    notes.Add($"Gap to formula {gapPercent:0.##} % exceeds tolerance {_options.TolerancePercent:0.##} %.");
                 }
             }
 
             // The Python formula must agree with the .NET formula. If not, units or constants differ.
-            if (Math.Abs(response.FormulaShaftDiameterMm - dotNetFormulaMm) > 0.5)
+            if (response.FormulaShaftDiameterMm - dotNetFormulaMm > 0.5)
             {
                 isTrusted = false;
-                notes.Add($"Python formula ({response.FormulaShaftDiameterMm:0.#} mm) differs from .NET formula ({dotNetFormulaMm:0.#} mm). Check units and constants.");
+                notes.Add($"Python formula ({response.FormulaShaftDiameterMm:0.#} mm) is larger than the recommended size ({dotNetFormulaMm:0.#} mm). Check units and constants.");
             }
 
             if (!string.IsNullOrWhiteSpace(response.Notes))
@@ -138,11 +143,11 @@ namespace Agitator.Business.Services
 
             return new ShaftPredictionResult
             {
-                RawFormulaDiameterMm = response.RawFormulaDiameterMm,
+                RawFormulaDiameterMm = dotNetFormulaMm,
                 FormulaShaftDiameterMm = dotNetFormulaMm,
                 PredictedShaftDiameterMm = response.PredictedShaftDiameterMm,
                 RawPredictedDiameterMm = response.RawPredictedDiameterMm,
-                GapPercent = response.GapPercent,
+                GapPercent = gapPercent,
                 ShearStressMpa = response.ShearStressMpa,
                 AllowableShearStressMpa = response.AllowableShearStressMpa,
                 IsTrusted = isTrusted,

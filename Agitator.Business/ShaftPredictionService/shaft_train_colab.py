@@ -46,7 +46,7 @@ from shaft_model import (
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 SEED = 42
 
-EPOCHS = 60000               # resume: trains from the saved epoch (30000) up to this value
+EPOCHS = 70000               # resume: trains from the saved epoch (30000) up to this value
 LEARNING_RATE = 1e-3
 LEARNING_RATE_END = 1e-5     # learning rate decays smoothly to this value
 N_INTERIOR = 2048            # design points resampled every epoch (log-uniform)
@@ -58,8 +58,8 @@ W_PDE = 1.0
 W_BC = 10.0
 W_DATA = 1.0                 # FEA station data (w, theta, phi)
 W_FEA_STRESS = 1.0           # FEA max shear anchor on the field network
-W_CONSTRAINT = 5.0           # raised from 1.0: penalise designs over a limit harder
-W_TIGHTNESS = 0.1            # kept low so the size is pulled down only gently
+W_CONSTRAINT = 20.0           # raised from 1.0: penalise designs over a limit harder
+W_TIGHTNESS = 0.03            # kept low so the size is pulled down only gently
 CONSTRAINT_WARMUP = 5000     # epochs over which the diameter loss ramps from 0 to full weight
 N_DATA_BATCH = 4096          # FEA station rows per epoch
 
@@ -72,8 +72,8 @@ TRAIN_SPEED_RPM = (10.0, 600.0)
 TRAIN_MASS_KG = (1.0, 5000.0)
 
 CHECKPOINT_EVERY = 2000
-RESUME_FROM = "/content/drive/MyDrive/shaft_model.pth"   # None = start from scratch
-CHECKPOINT_PATH = "/content/drive/MyDrive/shaft_model.pth"
+RESUME_FROM = "/content/drive/MyDrive/shaft_model_v2.pth"
+CHECKPOINT_PATH = "/content/drive/MyDrive/shaft_model_v3.pth"
 # =============================================================================
 
 TRAIN_RANGES = list(PARAM_RANGES)

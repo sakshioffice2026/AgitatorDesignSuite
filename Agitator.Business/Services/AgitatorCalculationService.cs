@@ -145,6 +145,8 @@ namespace Agitator.Business.Services
             double motorPowerKw = powerWatts * MotorServiceFactor / TransmissionEfficiency / 1000.0;
 
             double ratedTorqueNm = Math.Round(torqueNm, 2);
+            shaftDiameterM = SelectGoverningShaftDiameterM(
+                vessel, impeller, ratedTorqueNm, shaftDiameterM, fluid.OperatingTemperatureC);
             var manual = ComputeManualPhysics(vessel, impeller, ratedTorqueNm, shaftDiameterM, fluid.OperatingTemperatureC);
 
             return new CalculationResult
@@ -254,7 +256,7 @@ namespace Agitator.Business.Services
         /// M = bending moment from hydraulic radial force over shaft length.
         /// Result is rounded up to the next standard shaft size.
         /// </summary>
-        private static double CalculateShaftDiameterM(Vessel vessel, Impeller impeller, double ratedTorqueNm, double allowableShearPa)
+        private static double RawStressDiameterM(Vessel vessel, Impeller impeller, double ratedTorqueNm, double allowableShearPa)
         {
             double designTorque = ratedTorqueNm * MotorServiceFactor;
 
@@ -269,8 +271,68 @@ namespace Agitator.Business.Services
                 Math.Pow(BendingFactorKm * bendingMoment, 2) +
                 Math.Pow(TorsionFactorKt * designTorque, 2));
 
-            double diameterM = Math.Cbrt(16.0 * equivalentTorque / (Math.PI * allowableShearPa));
-            return RoundUpToStandardSizeM(diameterM);
+            return Math.Cbrt(16.0 * equivalentTorque / (Math.PI * allowableShearPa));
+        }
+
+        private static double CalculateShaftDiameterM(Vessel vessel, Impeller impeller, double ratedTorqueNm, double allowableShearPa)
+        {
+            return RoundUpToStandardSizeM(RawStressDiameterM(vessel, impeller, ratedTorqueNm, allowableShearPa));
+        }
+
+        private bool PassesDesignChecks(
+            Vessel vessel, Impeller impeller, double ratedTorqueNm,
+            double diameterM, double temperatureC, bool includeFatigue)
+        {
+            var p = ComputeManualPhysics(vessel, impeller, ratedTorqueNm, diameterM, temperatureC);
+            double deflectionLimitMm = _comparison.DeflectionLimitRatio * ComputeShaftLengthM(vessel.LiquidHeightM) * 1000.0;
+
+            bool ok = p.TipDeflectionMm <= deflectionLimitMm
+                && impeller.RotationalSpeedRpm <= _comparison.MaxCriticalSpeedRatio * p.CriticalSpeedRpm;
+
+            if (includeFatigue)
+            {
+                ok = ok && p.GoodmanFactor >= _comparison.RequiredFatigueFactor;
+            }
+
+            return ok;
+        }
+
+        /// <summary>Smallest standard size, not below the stress size, that passes deflection, critical speed and fatigue.</summary>
+        private double SelectGoverningShaftDiameterM(
+            Vessel vessel, Impeller impeller, double ratedTorqueNm,
+            double stressDiameterM, double temperatureC)
+        {
+            foreach (double sizeMm in StandardShaftSizesMm)
+            {
+                double diameterM = sizeMm / 1000.0;
+                if (diameterM + 1e-9 < stressDiameterM) continue;
+                if (PassesDesignChecks(vessel, impeller, ratedTorqueNm, diameterM, temperatureC, true))
+                    return diameterM;
+            }
+
+            return stressDiameterM;
+        }
+
+        /// <summary>Exact (unrounded) smallest diameter passing stress, deflection and critical speed.</summary>
+        private double ComputeRequiredRawDiameterMm(
+            Vessel vessel, Impeller impeller, double ratedTorqueNm,
+            double allowableShearPa, double temperatureC)
+        {
+            double stressM = RawStressDiameterM(vessel, impeller, ratedTorqueNm, allowableShearPa);
+            double lo = 0.001;
+            double hi = 5.0;
+
+            if (PassesDesignChecks(vessel, impeller, ratedTorqueNm, lo, temperatureC, false))
+                return stressM * 1000.0;
+
+            for (int i = 0; i < 60; i++)
+            {
+                double mid = 0.5 * (lo + hi);
+                if (PassesDesignChecks(vessel, impeller, ratedTorqueNm, mid, temperatureC, false)) hi = mid;
+                else lo = mid;
+            }
+
+            return Math.Max(stressM, hi) * 1000.0;
         }
 
         /// <summary>Design torque (N*m) = rated torque x motor service factor.</summary>
@@ -520,7 +582,8 @@ namespace Agitator.Business.Services
             {
                 Name = "Shaft diameter (before rounding)",
                 Unit = "mm",
-                Manual = prediction is null ? calculation.RecommendedShaftDiameterMm : prediction.RawFormulaDiameterMm,
+                Manual = ComputeRequiredRawDiameterMm(
+                    vessel, impeller, calculation.TorqueNm, allowableShearMpa * 1e6, fluid.OperatingTemperatureC),
                 Fea = feaDiameterMm,
                 Pinn = prediction?.RawPredictedDiameterMm,
                 TolerancePercent = _comparison.DiameterTolerancePercent

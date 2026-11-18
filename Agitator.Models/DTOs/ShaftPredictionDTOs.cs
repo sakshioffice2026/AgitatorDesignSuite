@@ -62,6 +62,9 @@ namespace Agitator.Models.DTOs
 
         [JsonPropertyName("surfaceFinish")]
         public string SurfaceFinish { get; set; } = "machined";
+
+        [JsonPropertyName("shaftDiameterMm")]
+        public double ShaftDiameterMm { get; set; }
     }
 
     /// <summary>Raw response from the Python service. Names match the Python response exactly.</summary>

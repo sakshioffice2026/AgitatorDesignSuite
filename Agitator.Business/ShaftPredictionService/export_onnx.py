@@ -38,7 +38,7 @@ from shaft_model import (
     SPEED_RATIO_LIMIT,
 )
 
-OPSET_VERSION = 17
+OPSET_VERSION = 18
 
 
 class ShaftOnnxWrapper(nn.Module):
@@ -87,17 +87,16 @@ def main(checkpoint_path, onnx_path):
     )
     assert dummy_params.shape[1] == N_PARAMS
 
+    batch = torch.export.Dim("batch")
     torch.onnx.export(
         wrapper,
         (dummy_xi, dummy_params),
         onnx_path,
         input_names=["xi", "params"],
         output_names=["fields", "diameter_m"],
-        dynamic_axes={
-            "xi": {0: "batch"},
-            "params": {0: "batch"},
-            "fields": {0: "batch"},
-            "diameter_m": {0: "batch"},
+        dynamic_shapes={
+            "xi": {0: batch},
+            "params": {0: batch},
         },
         opset_version=OPSET_VERSION,
     )
