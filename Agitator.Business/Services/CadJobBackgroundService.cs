@@ -35,6 +35,12 @@ namespace Agitator.Business.Services
     /// </summary>
     public class CadJobBackgroundService : BackgroundService
     {
+        // Same fallbacks as AgitatorCalculationService.ComputeManualPhysics, so FEA and the
+        // manual formulas use the same material when the shaft material has no value stored.
+        private const double FeaDefaultElasticModulusGpa = 200.0;
+        private const double FeaDefaultPoissonRatio = 0.30;
+        private const double FeaDefaultDensityKgM3 = 7850.0;
+
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly CadIntegrationOptions _options;
         private readonly ILogger<CadJobBackgroundService> _logger;
@@ -200,9 +206,10 @@ namespace Agitator.Business.Services
             {
                 var vessel = job.Project!.Vessel!;
                 var impeller = job.Project!.Impeller!;
+                var material = impeller.ShaftMaterial;
                 double temperatureC = job.Project.FluidProperties?.OperatingTemperatureC ?? 30;
                 double allowableMpa = AgitatorCalculationService
-                    .ComputeAllowableShearStressPa(impeller.ShaftMaterial, temperatureC) / 1_000_000.0;
+                    .ComputeAllowableShearStressPa(material, temperatureC) / 1_000_000.0;
 
                 var jobDir = Path.Combine(_options.OutputDirectory, $"project_{job.ProjectId}");
                 Directory.CreateDirectory(jobDir);
@@ -213,7 +220,10 @@ namespace Agitator.Business.Services
                     shaftLengthMm = AgitatorCalculationService.ComputeShaftLengthM(vessel.LiquidHeightM) * 1000.0,
                     designTorqueNm = AgitatorCalculationService.ComputeDesignTorqueNm(job.TorqueNm),
                     radialForceN = AgitatorCalculationService.ComputeRadialForceN(job.TorqueNm, impeller.DiameterM),
-                    allowableShearMpa = allowableMpa
+                    allowableShearMpa = allowableMpa,
+                    elasticModulusGpa = (double?)material?.ElasticModulusGpa ?? FeaDefaultElasticModulusGpa,
+                    poissonRatio = (double?)material?.PoissonRatio ?? FeaDefaultPoissonRatio,
+                    densityKgM3 = (double?)material?.DensityKgM3 ?? FeaDefaultDensityKgM3
                 };
 
                 var paramsPath = Path.Combine(jobDir, "fea_params.json");

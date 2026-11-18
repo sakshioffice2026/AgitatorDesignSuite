@@ -1,12 +1,12 @@
 """
-fea_check_shaft.py  (NEW FILE)
+fea_check_shaft.py
 
-Per-project shaft stress check with FreeCAD FEM + CalculiX.
+Per-project shaft check with FreeCAD FEM + CalculiX.
 Run with FreeCAD's bundled python.exe, same as generate_agitator_model.py:
 
     python.exe fea_check_shaft.py --params fea_params.json --output fea_result.json
 
-fea_params.json (all required):
+fea_params.json (required):
     {
       "shaftDiameterMm":   60.0,     selected standard shaft size
       "shaftLengthMm":     1500.0,   total shaft length (fixed end to impeller)
@@ -15,10 +15,20 @@ fea_params.json (all required):
       "allowableShearMpa": 62.4      allowable shear stress for this material/temperature
     }
 
+fea_params.json (optional, defaults keep the old behaviour):
+    {
+      "elasticModulusGpa": 210.0,
+      "poissonRatio":      0.30,
+      "densityKgM3":       7850.0
+    }
+
 fea_result.json:
     {
       "status": "ok" | "failed",
-      "feaMaxShearMpa": 48.1,
+      "feaMaxShearMpa": 48.1,        max shear stress (Tresca) in the stress window
+      "feaVonMisesMpa": 83.2,        max von Mises stress in the stress window
+      "feaTipDeflectionMm": 1.23,    lateral deflection of the free end (along the load)
+      "feaTwistDeg": 0.045,          rigid-body twist of the free end face about the shaft axis
       "allowableShearMpa": 62.4,
       "utilization": 0.771,
       "passed": true,
@@ -28,8 +38,11 @@ fea_result.json:
 
 Model: cantilever shaft, fixed at z=0, torque (as a couple on two half end-faces)
 plus radial force at z=L. Stress is read away from both end faces to avoid
-load/support singularities. No bending safety factor is applied, so the FEA
-stress is expected to be lower than the formula stress for bending-heavy cases.
+load/support singularities. Deflection and twist are read on the free end face:
+deflection is the mean displacement along the load direction (y), twist is the
+least-squares rigid rotation about z of the end face after removing its translation.
+No bending safety factor is applied, so the FEA stress is expected to be lower than
+the formula stress for bending-heavy cases.
 """
 
 import argparse
@@ -40,6 +53,10 @@ import sys
 import traceback
 
 END_EXCLUDE_FRACTION = 0.05
+
+DEFAULT_ELASTIC_MODULUS_GPA = 210.0
+DEFAULT_POISSON_RATIO = 0.30
+DEFAULT_DENSITY_KG_M3 = 7850.0
 
 
 def bootstrap_freecad_paths():
@@ -93,6 +110,49 @@ def faces_at_z(shape, z_target, tol=1e-4):
     return found
 
 
+def end_face_motion(nodes, result, length_mm):
+    """
+    Free-end deflection (mm, along y, the load direction) and twist (rad, about z).
+
+    Deflection : mean y displacement of the free end face nodes.
+    Twist      : least-squares rigid rotation about the face centroid after removing the
+                 mean translation, phi = sum(x*duy - y*dux) / sum(x^2 + y^2).
+    Returns (None, None) when the displacement result is not available.
+    """
+    vectors = getattr(result, "DisplacementVectors", None)
+    if not vectors:
+        return None, None
+
+    tol = max(1e-4, 1e-6 * length_mm)
+    points = []
+    for node_id, disp in zip(result.NodeNumbers, vectors):
+        node = nodes[node_id]
+        if abs(node.z - length_mm) <= tol:
+            points.append((node.x, node.y, disp.x, disp.y))
+
+    if len(points) < 3:
+        return None, None
+
+    n = float(len(points))
+    cx = sum(p[0] for p in points) / n
+    cy = sum(p[1] for p in points) / n
+    ux0 = sum(p[2] for p in points) / n
+    uy0 = sum(p[3] for p in points) / n
+
+    numerator = 0.0
+    denominator = 0.0
+    for x, y, ux, uy in points:
+        rx = x - cx
+        ry = y - cy
+        numerator += rx * (uy - uy0) - ry * (ux - ux0)
+        denominator += rx * rx + ry * ry
+
+    if denominator <= 0.0:
+        return abs(uy0), None
+
+    return abs(uy0), abs(numerator / denominator)
+
+
 def run_fea(params, bin_dir):
     import FreeCAD as App
     import Part
@@ -108,8 +168,14 @@ def run_fea(params, bin_dir):
     radial_force_n = float(params["radialForceN"])
     allowable_mpa = float(params["allowableShearMpa"])
 
+    elastic_modulus_gpa = float(params.get("elasticModulusGpa") or DEFAULT_ELASTIC_MODULUS_GPA)
+    poisson_ratio = float(params.get("poissonRatio") or DEFAULT_POISSON_RATIO)
+    density_kg_m3 = float(params.get("densityKgM3") or DEFAULT_DENSITY_KG_M3)
+
     if diameter_mm <= 0 or length_mm <= 0 or allowable_mpa <= 0:
         raise ValueError("Diameter, length and allowable stress must be positive")
+    if elastic_modulus_gpa <= 0 or density_kg_m3 <= 0 or not (-1.0 < poisson_ratio < 0.5):
+        raise ValueError("Elastic modulus and density must be positive, Poisson ratio in (-1, 0.5)")
 
     radius_mm = diameter_mm / 2.0
 
@@ -138,9 +204,9 @@ def run_fea(params, bin_dir):
         material = ObjectsFem.makeMaterialSolid(doc, "Steel")
         mat = material.Material
         mat["Name"] = "Steel"
-        mat["YoungsModulus"] = "210000 MPa"
-        mat["PoissonRatio"] = "0.30"
-        mat["Density"] = "7850 kg/m^3"
+        mat["YoungsModulus"] = "%.6f MPa" % (elastic_modulus_gpa * 1000.0)
+        mat["PoissonRatio"] = "%.6f" % poisson_ratio
+        mat["Density"] = "%.6f kg/m^3" % density_kg_m3
         material.Material = mat
         analysis.addObject(material)
 
@@ -206,18 +272,32 @@ def run_fea(params, bin_dir):
         if z_hi <= z_lo:
             raise RuntimeError("Shaft too short for stress window")
 
+        von_mises_values = getattr(result, "vonMises", None)
+        has_von_mises = bool(von_mises_values) and len(von_mises_values) == len(result.NodeNumbers)
+
         tau_max_mpa = 0.0
-        for node_id, tau in zip(result.NodeNumbers, result.MaxShear):
+        von_mises_max_mpa = 0.0
+        for index, node_id in enumerate(result.NodeNumbers):
             z = nodes[node_id].z
-            if z_lo <= z <= z_hi and tau > tau_max_mpa:
+            if not (z_lo <= z <= z_hi):
+                continue
+            tau = result.MaxShear[index]
+            if tau > tau_max_mpa:
                 tau_max_mpa = tau
+            if has_von_mises and von_mises_values[index] > von_mises_max_mpa:
+                von_mises_max_mpa = von_mises_values[index]
 
         if tau_max_mpa <= 0.0:
             raise RuntimeError("Zero stress result")
 
+        tip_deflection_mm, twist_rad = end_face_motion(nodes, result, length_mm)
+
         return {
             "status": "ok",
             "feaMaxShearMpa": round(tau_max_mpa, 3),
+            "feaVonMisesMpa": round(von_mises_max_mpa, 3) if von_mises_max_mpa > 0.0 else None,
+            "feaTipDeflectionMm": round(tip_deflection_mm, 4) if tip_deflection_mm is not None else None,
+            "feaTwistDeg": round(math.degrees(twist_rad), 5) if twist_rad is not None else None,
             "allowableShearMpa": round(allowable_mpa, 3),
             "utilization": round(tau_max_mpa / allowable_mpa, 4),
             "passed": bool(tau_max_mpa <= allowable_mpa),
@@ -247,6 +327,9 @@ def main():
         write_result(args.output, {
             "status": "failed",
             "feaMaxShearMpa": None,
+            "feaVonMisesMpa": None,
+            "feaTipDeflectionMm": None,
+            "feaTwistDeg": None,
             "allowableShearMpa": None,
             "utilization": None,
             "passed": None,

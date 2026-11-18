@@ -127,6 +127,9 @@ namespace Agitator.Models.DTOs
         public double ShaftLengthM { get; set; }
         public double OperatingSpeedRpm { get; set; }
 
+        /// <summary>PINN deflection, twist, stresses, critical speed and fatigue factors from the Python service (null for results saved before this feature).</summary>
+        public ShaftPhysicsServiceBlock? Physics { get; set; }
+
         /// <summary>Manual vs FEA vs PINN comparison and design checks (null for results saved before this feature).</summary>
         public ShaftComparisonResult? Comparison { get; set; }
 

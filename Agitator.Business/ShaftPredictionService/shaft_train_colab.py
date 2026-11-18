@@ -17,6 +17,9 @@ Training signals (the diameter formula in shaft_physics.py is NEVER used as a la
     diameter network : pinn_loss.design_constraint_loss (stress, deflection, critical speed,
                        smallest passing diameter), using the trained field network as the physics
 The two networks use separate optimisers, so the diameter loss cannot bend the field network.
+
+Resuming: training continues from the saved epoch up to EPOCHS, so EPOCHS must be larger than
+the epoch already reached (a finished 30000-epoch run saved epoch 29999).
 """
 
 import json
@@ -43,7 +46,7 @@ from shaft_model import (
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 SEED = 42
 
-EPOCHS = 30000
+EPOCHS = 60000               # resume: trains from the saved epoch (30000) up to this value
 LEARNING_RATE = 1e-3
 LEARNING_RATE_END = 1e-5     # learning rate decays smoothly to this value
 N_INTERIOR = 2048            # design points resampled every epoch (log-uniform)
@@ -55,8 +58,8 @@ W_PDE = 1.0
 W_BC = 10.0
 W_DATA = 1.0                 # FEA station data (w, theta, phi)
 W_FEA_STRESS = 1.0           # FEA max shear anchor on the field network
-W_CONSTRAINT = 1.0
-W_TIGHTNESS = 0.1
+W_CONSTRAINT = 5.0           # raised from 1.0: penalise designs over a limit harder
+W_TIGHTNESS = 0.1            # kept low so the size is pulled down only gently
 CONSTRAINT_WARMUP = 5000     # epochs over which the diameter loss ramps from 0 to full weight
 N_DATA_BATCH = 4096          # FEA station rows per epoch
 
@@ -69,7 +72,7 @@ TRAIN_SPEED_RPM = (10.0, 600.0)
 TRAIN_MASS_KG = (1.0, 5000.0)
 
 CHECKPOINT_EVERY = 2000
-RESUME_FROM = None           # e.g. "/content/drive/MyDrive/shaft_model.pth"
+RESUME_FROM = "/content/drive/MyDrive/shaft_model.pth"   # None = start from scratch
 CHECKPOINT_PATH = "/content/drive/MyDrive/shaft_model.pth"
 # =============================================================================
 
@@ -222,6 +225,10 @@ def main():
         opt_diameter.load_state_dict(ckpt["optimizer_state"]["diameter"])
         start_epoch = ckpt["epoch"] + 1
         print(f"Resumed from {RESUME_FROM} at epoch {start_epoch}")
+
+    if start_epoch >= EPOCHS:
+        print(f"Nothing to train: saved epoch {start_epoch} >= EPOCHS {EPOCHS}. Increase EPOCHS.")
+        return
 
     data = load_fea_dataset(FEA_DATASET_JSONL, DEVICE)
     if data is not None:
