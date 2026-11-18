@@ -34,6 +34,34 @@ namespace Agitator.Models.DTOs
 
         [JsonPropertyName("shaftMaterialName")]
         public string ShaftMaterialName { get; set; } = string.Empty;
+
+
+        [JsonPropertyName("operatingSpeedRpm")]
+        public double OperatingSpeedRpm { get; set; }
+
+        [JsonPropertyName("impellerMassKg")]
+        public double? ImpellerMassKg { get; set; }
+
+        [JsonPropertyName("elasticModulusGpa")]
+        public double ElasticModulusGpa { get; set; }
+
+        [JsonPropertyName("poissonRatio")]
+        public double PoissonRatio { get; set; }
+
+        [JsonPropertyName("densityKgM3")]
+        public double DensityKgM3 { get; set; }
+
+        [JsonPropertyName("yieldStrengthMpa")]
+        public double YieldStrengthMpa { get; set; }
+
+        [JsonPropertyName("ultimateStrengthMpa")]
+        public double UltimateStrengthMpa { get; set; }
+
+        [JsonPropertyName("enduranceLimitMpa")]
+        public double? EnduranceLimitMpa { get; set; }
+
+        [JsonPropertyName("surfaceFinish")]
+        public string SurfaceFinish { get; set; } = "machined";
     }
 
     /// <summary>Raw response from the Python service. Names match the Python response exactly.</summary>
@@ -69,6 +97,13 @@ namespace Agitator.Models.DTOs
 
         [JsonPropertyName("notes")]
         public string Notes { get; set; } = string.Empty;
+
+
+        [JsonPropertyName("shaftLengthM")]
+        public double ShaftLengthM { get; set; }
+
+        [JsonPropertyName("physics")]
+        public ShaftPhysicsServiceBlock? Physics { get; set; }
     }
 
     /// <summary>Final result stored as JSON on CalculationResult.PredictionJson and shown in the view.</summary>
@@ -89,6 +124,11 @@ namespace Agitator.Models.DTOs
         public string HeatTreatment { get; set; } = string.Empty;
         public double OperatingTemperatureC { get; set; }
         public double YieldStrengthAtTempMpa { get; set; }
+        public double ShaftLengthM { get; set; }
+        public double OperatingSpeedRpm { get; set; }
+
+        /// <summary>Manual vs FEA vs PINN comparison and design checks (null for results saved before this feature).</summary>
+        public ShaftComparisonResult? Comparison { get; set; }
 
     }
 }

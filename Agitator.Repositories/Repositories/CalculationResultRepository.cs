@@ -46,10 +46,17 @@ namespace Agitator.Repositories.Repositories
                 existing.RecommendedShaftDiameterMm = result.RecommendedShaftDiameterMm;
                 existing.RecommendedMotorPowerKw = result.RecommendedMotorPowerKw;
                 existing.CalculatedAtUtc = DateTime.UtcNow;
+                existing.TipDeflectionMm = result.TipDeflectionMm;
+                existing.TwistDeg = result.TwistDeg;
+                existing.CriticalSpeedRpm = result.CriticalSpeedRpm;
+                existing.GoodmanFactor = result.GoodmanFactor;
 
-                // The old prediction no longer matches the new inputs.
+                // The old prediction and comparison no longer match the new inputs.
                 existing.PredictionJson = null;
                 existing.PredictedAt = null;
+                existing.ComparisonJson = null;
+                existing.ComparedAt = null;
+                existing.ComparisonPassed = null;
             }
 
             await _db.SaveChangesAsync();
@@ -96,6 +103,21 @@ namespace Agitator.Repositories.Repositories
 
             result.PredictionJson = predictionJson;
             result.PredictedAt = predictedAtUtc;
+            await _db.SaveChangesAsync();
+            return (true, null);
+        }
+
+        public async Task<(bool success, string? error)> SetComparisonAsync(int projectId, string comparisonJson, DateTime comparedAtUtc, bool passed)
+        {
+            var result = await _db.CalculationResults
+                .FirstOrDefaultAsync(r => r.ProjectId == projectId);
+
+            if (result is null)
+                return (false, $"No calculation result found for project {projectId}.");
+
+            result.ComparisonJson = comparisonJson;
+            result.ComparedAt = comparedAtUtc;
+            result.ComparisonPassed = passed;
             await _db.SaveChangesAsync();
             return (true, null);
         }

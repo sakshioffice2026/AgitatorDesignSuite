@@ -1,6 +1,7 @@
 using Agitator.Business.Contracts;
 using Agitator.Business.Services;
 using Agitator.Core.Entities;
+using Agitator.Models.DTOs;
 using Agitator.Models.ViewModel;
 using Agitator.Repositories.Contracts;
 using Agitator.Utilities.Helpers;
@@ -267,7 +268,9 @@ namespace AgitatorDesignSuite.Web.Controllers
                     new BreadcrumbItem { Text = "Projects", Url = Url.Action("Index") },
                     new BreadcrumbItem { Text = $"{project.Name} — Results", IsActive = true });
 
-                return View(MapToDetailViewModel(project));
+                var vm = MapToDetailViewModel(project);
+                vm.ShaftComparison = BuildComparison(project);
+                return View(vm);
             }
             catch (Exception ex)
             {
@@ -299,6 +302,18 @@ namespace AgitatorDesignSuite.Web.Controllers
                 var json = System.Text.Json.JsonSerializer.Serialize(prediction);
                 var (success, error) = await _uow.calculationResultRepository
                     .SetPredictionAsync(id, json, prediction.GeneratedAtUtc);
+
+                if (success)
+                {
+                    var comparison = _calculationService.BuildShaftComparison(
+                        project.Vessel, project.Impeller, project.FluidProperties, project.CalculationResult, prediction);
+
+                    (success, error) = await _uow.calculationResultRepository.SetComparisonAsync(
+                        id,
+                        System.Text.Json.JsonSerializer.Serialize(comparison),
+                        comparison.GeneratedAtUtc,
+                        comparison.OverallPassed);
+                }
 
                 TempData[success ? "Success" : "Error"] = success ? "Shaft prediction generated." : error;
                 return RedirectToAction(nameof(Results), new { id });
@@ -349,6 +364,18 @@ namespace AgitatorDesignSuite.Web.Controllers
                 {
                     TempData["Error"] = "Project not found.";
                     return RedirectToAction(nameof(Index));
+                }
+
+                // Refresh the comparison so the PDF carries the latest FEA and PINN values.
+                var comparison = BuildComparison(project);
+                if (comparison is not null && project.CalculationResult is not null)
+                {
+                    var comparisonJson = System.Text.Json.JsonSerializer.Serialize(comparison);
+                    await _uow.calculationResultRepository.SetComparisonAsync(
+                        id, comparisonJson, comparison.GeneratedAtUtc, comparison.OverallPassed);
+                    project.CalculationResult.ComparisonJson = comparisonJson;
+                    project.CalculationResult.ComparedAt = comparison.GeneratedAtUtc;
+                    project.CalculationResult.ComparisonPassed = comparison.OverallPassed;
                 }
 
                 var pdfPath = _reportService.GenerateDatasheet(project);
@@ -451,6 +478,34 @@ namespace AgitatorDesignSuite.Web.Controllers
             };
         }
 
+        /// <summary>
+        /// Builds the manual / FEA / PINN comparison from the stored prediction and FEA results.
+        /// Returns null when the project has no calculation yet.
+        /// </summary>
+        private ShaftComparisonResult? BuildComparison(Project project)
+        {
+            if (project.Vessel is null || project.Impeller is null ||
+                project.FluidProperties is null || project.CalculationResult is null)
+                return null;
+
+            ShaftPredictionResult? prediction = null;
+            var predictionJson = project.CalculationResult.PredictionJson;
+            if (!string.IsNullOrWhiteSpace(predictionJson))
+            {
+                try
+                {
+                    prediction = System.Text.Json.JsonSerializer.Deserialize<ShaftPredictionResult>(predictionJson);
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    prediction = null;
+                }
+            }
+
+            return _calculationService.BuildShaftComparison(
+                project.Vessel, project.Impeller, project.FluidProperties, project.CalculationResult, prediction);
+        }
+
         private static ProjectFormViewModel MapToFormViewModel(Project project)
         {
             return new ProjectFormViewModel
@@ -466,6 +521,7 @@ namespace AgitatorDesignSuite.Web.Controllers
                 ImpellerDiameterM = project.Impeller?.DiameterM ?? 0.7,
                 RotationalSpeedRpm = project.Impeller?.RotationalSpeedRpm ?? 90,
                 NumberOfImpellers = project.Impeller?.NumberOfImpellers ?? 1,
+                ImpellerMassKg = project.Impeller?.ImpellerMassKg ?? 20,
                 DensityKgM3 = project.FluidProperties?.DensityKgM3 ?? 1000,
                 ViscosityPaS = project.FluidProperties?.ViscosityPaS ?? 0.001,
                 OperatingTemperatureC = project.FluidProperties?.OperatingTemperatureC ?? 30,

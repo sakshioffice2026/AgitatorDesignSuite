@@ -1,4 +1,5 @@
 ﻿using System.Net.Http.Json;
+using System.Text.Json;
 using Agitator.Business.Contracts;
 using Agitator.Core.Entities;
 using Agitator.Models.DTOs;
@@ -16,15 +17,18 @@ namespace Agitator.Business.Services
     {
         private readonly HttpClient _httpClient;
         private readonly ShaftPredictionOptions _options;
+        private readonly ShaftComparisonOptions _comparison;
         private readonly ILogger<ShaftPredictionService> _logger;
 
         public ShaftPredictionService(
             HttpClient httpClient,
             IOptions<ShaftPredictionOptions> options,
+            IOptions<ShaftComparisonOptions> comparison,
             ILogger<ShaftPredictionService> logger)
         {
             _httpClient = httpClient;
             _options = options.Value;
+            _comparison = comparison.Value;
             _logger = logger;
         }
 
@@ -39,8 +43,15 @@ namespace Agitator.Business.Services
             if (fluid is null) throw new ArgumentNullException(nameof(fluid));
             if (calculation is null) throw new ArgumentNullException(nameof(calculation));
 
+            var material = impeller.ShaftMaterial;
+
             double allowableShearPa = AgitatorCalculationService.ComputeAllowableShearStressPa(
-                impeller.ShaftMaterial, fluid.OperatingTemperatureC);
+                material, fluid.OperatingTemperatureC);
+
+            double yieldAtTempMpa = material is null
+                ? 0.0
+                : AgitatorCalculationService.ComputeYieldAtTemperatureMpa(material, fluid.OperatingTemperatureC);
+            double ultimateMpa = (double?)material?.UltimateStrengthMpa ?? 0.0;
 
             var request = new ShaftPredictionRequest
             {
@@ -49,13 +60,24 @@ namespace Agitator.Business.Services
                 LiquidHeightM = vessel.LiquidHeightM,
                 AllowableShearStressMpa = allowableShearPa / 1_000_000.0,
                 OperatingTemperatureC = fluid.OperatingTemperatureC,
-                ShaftMaterialName = impeller.ShaftMaterial?.DisplayName ?? string.Empty
+                ShaftMaterialName = impeller.ShaftMaterial?.DisplayName ?? string.Empty,
+                OperatingSpeedRpm = impeller.RotationalSpeedRpm,
+                ImpellerMassKg = (double?)impeller.ImpellerMassKg ?? 0.0,
+                ElasticModulusGpa = (double?)material?.ElasticModulusGpa ?? 200.0,
+                PoissonRatio = (double?)material?.PoissonRatio ?? 0.30,
+                DensityKgM3 = (double?)material?.DensityKgM3 ?? 7850.0,
+                YieldStrengthMpa = yieldAtTempMpa,
+                UltimateStrengthMpa = ultimateMpa,
+                EnduranceLimitMpa = (double?)material?.EnduranceLimitMpa ?? 0.5 * ultimateMpa,
+                SurfaceFinish = material?.SurfaceFinish ?? "machined"
             };
 
             var response = await CallServiceAsync(request, cancellationToken);
 
-            // Formula result from the existing .NET engine (the trusted source).
+            // Formula result from the existing .NET engine (includes Km = 1.5).
             double dotNetFormulaMm = calculation.RecommendedShaftDiameterMm;
+            var physics = response.Physics;
+            var fea = ReadFea(calculation.FeaCheckJson);
 
             var notes = new List<string>();
             bool isTrusted = true;
@@ -65,15 +87,41 @@ namespace Agitator.Business.Services
                 isTrusted = false;
             }
 
-            if (Math.Abs(response.GapPercent) > _options.TolerancePercent)
-            {
-                isTrusted = false;
-                notes.Add($"Gap to formula {response.GapPercent:0.##} % exceeds tolerance {_options.TolerancePercent:0.##} %.");
-            }
-
             if (response.ShearStressMpa > response.AllowableShearStressMpa)
             {
                 isTrusted = false;
+            }
+
+            if (fea is not null)
+            {
+                // Trust is judged against FEA first.
+                if (physics is null)
+                {
+                    isTrusted = false;
+                    notes.Add("Service returned no physics block; PINN cannot be compared with FEA.");
+                }
+                else
+                {
+                    isTrusted &= WithinFea("Tip deflection", physics.TipDeflectionMm, fea.TipDeflectionMm,
+                        _comparison.DeflectionTolerancePercent, notes);
+                    isTrusted &= WithinFea("Angle of twist", physics.TwistDeg, fea.TwistDeg,
+                        _comparison.TwistTolerancePercent, notes);
+                    isTrusted &= WithinFea("Von Mises stress", physics.VonMisesStressMpa, fea.VonMisesMpa,
+                        _comparison.DiameterTolerancePercent, notes);
+                    isTrusted &= WithinFea("Max shear stress", physics.MaxShearStressMpa, fea.MaxShearMpa,
+                        _comparison.DiameterTolerancePercent, notes);
+                }
+            }
+            else
+            {
+                // No FEA: fall back to the formula.
+                notes.Add("FEA result not available; PINN judged against the formula only.");
+
+                if (Math.Abs(response.GapPercent) > _options.TolerancePercent)
+                {
+                    isTrusted = false;
+                    notes.Add($"Gap to formula {response.GapPercent:0.##} % exceeds tolerance {_options.TolerancePercent:0.##} %.");
+                }
             }
 
             // The Python formula must agree with the .NET formula. If not, units or constants differ.
@@ -107,8 +155,49 @@ namespace Agitator.Business.Services
                 YieldStrengthAtTempMpa = impeller.ShaftMaterial is null
                     ? 0
                     : Math.Round(AgitatorCalculationService.ComputeYieldAtTemperatureMpa(
-                        impeller.ShaftMaterial, fluid.OperatingTemperatureC), 1)
+                        impeller.ShaftMaterial, fluid.OperatingTemperatureC), 1),
+                ShaftLengthM = response.ShaftLengthM > 0
+                    ? response.ShaftLengthM
+                    : AgitatorCalculationService.ComputeShaftLengthM(vessel.LiquidHeightM),
+                Physics = response.Physics
             };
+        }
+
+        private static bool WithinFea(
+            string name,
+            double? pinn,
+            double? fea,
+            double tolerancePercent,
+            List<string> notes)
+        {
+            double? gap = ShaftComparisonMath.PercentDifference(pinn, fea);
+
+            if (!gap.HasValue || Math.Abs(gap.Value) <= tolerancePercent)
+            {
+                return true;
+            }
+
+            notes.Add($"{name}: PINN differs from FEA by {gap.Value:0.##} % (limit {tolerancePercent:0.##} %).");
+            return false;
+        }
+
+        private ShaftFeaResult? ReadFea(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
+            try
+            {
+                var fea = JsonSerializer.Deserialize<ShaftFeaResult>(json);
+                return fea is not null && fea.IsOk ? fea : null;
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "FEA result JSON could not be read.");
+                return null;
+            }
         }
 
         private async Task<ShaftPredictionServiceResponse> CallServiceAsync(

@@ -1,4 +1,5 @@
-﻿using Agitator.Business.Contracts;
+﻿using System.Text.Json;
+using Agitator.Business.Contracts;
 using Agitator.Core.Entities;
 using Agitator.Models.DTOs;
 using Microsoft.Extensions.Options;
@@ -18,6 +19,11 @@ namespace Agitator.Business.Services
     /// </summary>
     public class ReportService : IReportService
     {
+        private static readonly JsonSerializerOptions JsonReadOptions = new()
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
         private readonly ReportGenerationOptions _options;
 
         public ReportService(IOptions<ReportGenerationOptions> options)
@@ -40,6 +46,7 @@ namespace Agitator.Business.Services
             var impeller = project.Impeller;
             var fluid = project.FluidProperties;
             var result = project.CalculationResult;
+            var comparison = ReadComparison(result.ComparisonJson);
 
             Document.Create(container =>
             {
@@ -113,6 +120,96 @@ namespace Agitator.Business.Services
                             AddRow(table, "Recommended motor rating", $"{result.RecommendedMotorPowerKw:F2} kW");
                         });
 
+                        col.Item().Text("Shaft Design Values (manual formula)").Bold().FontSize(12);
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(c => { c.RelativeColumn(); c.RelativeColumn(); });
+                            AddRow(table, "Tip deflection", $"{result.TipDeflectionMm:F3} mm");
+                            AddRow(table, "Angle of twist", $"{result.TwistDeg:F4} deg");
+                            AddRow(table, "First critical speed", $"{result.CriticalSpeedRpm:F0} rpm");
+                            AddRow(table, "Goodman safety factor", $"{result.GoodmanFactor:F2}");
+                        });
+
+                        if (comparison is not null)
+                        {
+                            col.Item().Text("Shaft Design Checks").Bold().FontSize(12);
+                            col.Item().Table(table =>
+                            {
+                                table.ColumnsDefinition(c =>
+                                {
+                                    c.RelativeColumn(3);
+                                    c.RelativeColumn(2);
+                                    c.RelativeColumn(2);
+                                    c.RelativeColumn(2);
+                                    c.RelativeColumn(1.5f);
+                                });
+
+                                table.Header(h =>
+                                {
+                                    h.Cell().Text("Check").SemiBold();
+                                    h.Cell().Text("Demand").SemiBold();
+                                    h.Cell().Text("Limit").SemiBold();
+                                    h.Cell().Text("Utilisation").SemiBold();
+                                    h.Cell().Text("Result").SemiBold();
+                                });
+
+                                foreach (var check in comparison.Checks)
+                                {
+                                    table.Cell().Text($"{check.Name} [{check.Source}]");
+                                    table.Cell().Text($"{check.DemandValue:F2} {check.Unit}");
+                                    table.Cell().Text($"{check.CapacityValue:F2} {check.Unit}");
+                                    table.Cell().Text($"{check.Utilization:F2}");
+                                    table.Cell().Text(check.Passed ? "PASS" : "FAIL").SemiBold();
+                                }
+                            });
+
+                            col.Item().Text("Manual vs FEA vs PINN").Bold().FontSize(12);
+                            col.Item().Table(table =>
+                            {
+                                table.ColumnsDefinition(c =>
+                                {
+                                    c.RelativeColumn(3);
+                                    c.RelativeColumn(2);
+                                    c.RelativeColumn(2);
+                                    c.RelativeColumn(2);
+                                    c.RelativeColumn(1.5f);
+                                });
+
+                                table.Header(h =>
+                                {
+                                    h.Cell().Text("Quantity").SemiBold();
+                                    h.Cell().Text("Manual").SemiBold();
+                                    h.Cell().Text("FEA").SemiBold();
+                                    h.Cell().Text("PINN").SemiBold();
+                                    h.Cell().Text("PINN agrees").SemiBold();
+                                });
+
+                                foreach (var q in comparison.Quantities)
+                                {
+                                    table.Cell().Text($"{q.Name} [{q.Unit}]");
+                                    table.Cell().Text(FormatValue(q.Manual));
+                                    table.Cell().Text(FormatValue(q.Fea));
+                                    table.Cell().Text(FormatValue(q.Pinn));
+                                    table.Cell().Text(q.PinnAgrees switch
+                                    {
+                                        true => "Yes",
+                                        false => "No",
+                                        _ => "n/a"
+                                    });
+                                }
+                            });
+
+                            col.Item().Text(
+                                $"Overall: {(comparison.OverallPassed ? "all checks and comparisons passed" : "review required")}. " +
+                                $"Reference used for comparison: {(comparison.FeaAvailable ? "FEA" : "manual formula")}.")
+                                .FontSize(9).Italic();
+
+                            foreach (var note in comparison.Notes)
+                            {
+                                col.Item().Text($"Note: {note}").FontSize(8).Italic();
+                            }
+                        }
+
                         col.Item().PaddingTop(15).Background(Colors.Grey.Lighten3).Padding(8).Text(
                             "Disclaimer: This datasheet is generated for preliminary design reference only. " +
                             "All calculated values must be independently reviewed and approved by a licensed " +
@@ -129,6 +226,28 @@ namespace Agitator.Business.Services
             }).GeneratePdf(outputPath);
 
             return outputPath;
+        }
+
+        private static ShaftComparisonResult? ReadComparison(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
+            try
+            {
+                return JsonSerializer.Deserialize<ShaftComparisonResult>(json, JsonReadOptions);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        private static string FormatValue(double? value)
+        {
+            return value.HasValue ? value.Value.ToString("F3") : "-";
         }
 
         private static void AddRow(TableDescriptor table, string label, string value)

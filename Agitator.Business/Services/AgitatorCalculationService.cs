@@ -1,5 +1,8 @@
-﻿using Agitator.Business.Contracts;
+﻿using System.Text.Json;
+using Agitator.Business.Contracts;
 using Agitator.Core.Entities;
+using Agitator.Models.DTOs;
+using Microsoft.Extensions.Options;
 
 namespace Agitator.Business.Services
 {
@@ -36,7 +39,7 @@ namespace Agitator.Business.Services
         // Shaft material allowable shear stress (mild carbon steel, conservative).
         private const double AllowableShearStressPa = 40_000_000;
 
-        
+
         // Allowable shear = min(0.30 x Sy, 0.18 x Su) at temperature, x keyway reduction.
         private const double ShearFractionOfYield = 0.30;
         private const double ShearFractionOfUltimate = 0.18;
@@ -53,11 +56,40 @@ namespace Agitator.Business.Services
         private const double MotorServiceFactor = 1.25;
         private const double TransmissionEfficiency = 0.93; // gearbox + seal
 
+        // Manual shaft physics (cantilever, Km = 1) defaults when the material has no value.
+        private const double DefaultElasticModulusGpa = 200.0;
+        private const double DefaultPoissonRatio = 0.30;
+        private const double DefaultDensityKgM3 = 7850.0;
+        private const double FallbackYieldMpa = 250.0;
+        private const double FallbackUltimateMpa = 400.0;
+        private const double EquivalentShaftMassFraction = 33.0 / 140.0;
+        private const double ReliabilityFactor99 = 0.814;
+        private const double EnduranceLimitCapPa = 700e6;
+        private const double MaxReportedFactor = 999.0;
+
+        // Surface finish constants (Sut in MPa): ka = a * Sut^b.
+        private static readonly Dictionary<string, (double A, double B)> SurfaceFactors =
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ground"] = (1.58, -0.085),
+                ["machined"] = (4.51, -0.265),
+                ["cold_drawn"] = (4.51, -0.265),
+                ["hot_rolled"] = (57.7, -0.718),
+                ["as_forged"] = (272.0, -0.995),
+            };
+
         private static readonly double[] StandardShaftSizesMm =
         {
             20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100,
             110, 120, 130, 140, 150, 160, 180, 200, 220, 240, 260, 280, 300
         };
+
+        private readonly ShaftComparisonOptions _comparison;
+
+        public AgitatorCalculationService(IOptions<ShaftComparisonOptions> comparison)
+        {
+            _comparison = comparison.Value;
+        }
 
         public CalculationResult Calculate(Vessel vessel, Impeller impeller, FluidProperties fluid)
         {
@@ -112,6 +144,9 @@ namespace Agitator.Business.Services
             double shaftDiameterM = CalculateShaftDiameterM(vessel, impeller, torqueNm, allowableShearPa);
             double motorPowerKw = powerWatts * MotorServiceFactor / TransmissionEfficiency / 1000.0;
 
+            double ratedTorqueNm = Math.Round(torqueNm, 2);
+            var manual = ComputeManualPhysics(vessel, impeller, ratedTorqueNm, shaftDiameterM, fluid.OperatingTemperatureC);
+
             return new CalculationResult
             {
                 ReynoldsNumber = Math.Round(reynolds, 1),
@@ -122,7 +157,11 @@ namespace Agitator.Business.Services
                 TipSpeedMPerS = Math.Round(tipSpeed, 3),
                 RecommendedShaftDiameterMm = Math.Round(shaftDiameterM * 1000, 1),
                 RecommendedMotorPowerKw = Math.Round(motorPowerKw, 2),
-                CalculatedAtUtc = DateTime.UtcNow
+                CalculatedAtUtc = DateTime.UtcNow,
+                TipDeflectionMm = Math.Round(manual.TipDeflectionMm, 3),
+                TwistDeg = Math.Round(manual.TwistDeg, 4),
+                CriticalSpeedRpm = Math.Round(manual.CriticalSpeedRpm, 1),
+                GoodmanFactor = Math.Round(manual.GoodmanFactor, 3)
             };
         }
 
@@ -315,6 +354,287 @@ namespace Agitator.Business.Services
             }
 
             return Math.Ceiling(mm / 10.0) * 10.0 / 1000.0;
+        }
+
+        // ------------------------------------------------------------------
+        // Manual shaft physics (cantilever, Km = 1) and the three-way comparison
+        // ------------------------------------------------------------------
+        private readonly record struct ManualShaftPhysics(
+            double RootMomentNm,
+            double TipDeflectionMm,
+            double TwistDeg,
+            double MaxShearMpa,
+            double VonMisesMpa,
+            double CriticalSpeedRpm,
+            double GoodmanFactor,
+            double SoderbergFactor,
+            double YieldFactor);
+
+        private static ManualShaftPhysics ComputeManualPhysics(
+            Vessel vessel,
+            Impeller impeller,
+            double ratedTorqueNm,
+            double diameterM,
+            double temperatureC)
+        {
+            var material = impeller.ShaftMaterial;
+
+            double lengthM = ComputeShaftLengthM(vessel.LiquidHeightM);
+            double radialForceN = ComputeRadialForceN(ratedTorqueNm, impeller.DiameterM);
+            double torqueNm = ComputeDesignTorqueNm(ratedTorqueNm);
+            double momentNm = radialForceN * lengthM;
+
+            double ePa = ((double?)material?.ElasticModulusGpa ?? DefaultElasticModulusGpa) * 1e9;
+            double nu = (double?)material?.PoissonRatio ?? DefaultPoissonRatio;
+            double density = (double?)material?.DensityKgM3 ?? DefaultDensityKgM3;
+            double gPa = ePa / (2.0 * (1.0 + nu));
+
+            double yieldPa = (material is null
+                ? FallbackYieldMpa
+                : ComputeYieldAtTemperatureMpa(material, temperatureC)) * 1e6;
+            double ultimatePa = ((double?)material?.UltimateStrengthMpa ?? FallbackUltimateMpa) * 1e6;
+
+            double iM4 = Math.PI * Math.Pow(diameterM, 4) / 64.0;
+            double jM4 = 2.0 * iM4;
+            double areaM2 = Math.PI * diameterM * diameterM / 4.0;
+            double d3 = Math.PI * Math.Pow(diameterM, 3);
+
+            double tipDeflectionM = radialForceN * Math.Pow(lengthM, 3) / (3.0 * ePa * iM4);
+            double twistRad = torqueNm * lengthM / (gPa * jM4);
+
+            double sigmaB = 32.0 * momentNm / d3;
+            double tauT = 16.0 * torqueNm / d3;
+            double maxShearPa = 16.0 * Math.Sqrt(momentNm * momentNm + torqueNm * torqueNm) / d3;
+            double vonMisesPa = Math.Sqrt(sigmaB * sigmaB + 3.0 * tauT * tauT);
+
+            double impellerMassKg = (double?)impeller.ImpellerMassKg ?? 0.0;
+            double shaftMassKg = density * areaM2 * lengthM;
+            double equivalentMassKg = impellerMassKg + EquivalentShaftMassFraction * shaftMassKg;
+            double omega = Math.Sqrt(3.0 * ePa * iM4 / (equivalentMassKg * Math.Pow(lengthM, 3)));
+            double criticalRpm = omega * 60.0 / (2.0 * Math.PI);
+
+            double sePa = CorrectedEnduranceLimitPa(material, ultimatePa, diameterM);
+            double sigmaA = sigmaB;
+            double sigmaM = Math.Sqrt(3.0) * tauT;
+
+            return new ManualShaftPhysics(
+                RootMomentNm: momentNm,
+                TipDeflectionMm: tipDeflectionM * 1000.0,
+                TwistDeg: twistRad * 180.0 / Math.PI,
+                MaxShearMpa: maxShearPa / 1e6,
+                VonMisesMpa: vonMisesPa / 1e6,
+                CriticalSpeedRpm: criticalRpm,
+                GoodmanFactor: SafetyFactor(sigmaA / sePa + sigmaM / ultimatePa),
+                SoderbergFactor: SafetyFactor(sigmaA / sePa + sigmaM / yieldPa),
+                YieldFactor: SafetyFactor((sigmaA + sigmaM) / yieldPa));
+        }
+
+        private static double SafetyFactor(double denominator)
+        {
+            return denominator <= 0.0 ? MaxReportedFactor : Math.Min(1.0 / denominator, MaxReportedFactor);
+        }
+
+        private static double CorrectedEnduranceLimitPa(ShaftMaterial? material, double ultimatePa, double diameterM)
+        {
+            double? measuredMpa = (double?)material?.EnduranceLimitMpa;
+            double sePrime = measuredMpa.HasValue
+                ? measuredMpa.Value * 1e6
+                : Math.Min(0.5 * ultimatePa, EnduranceLimitCapPa);
+
+            string finish = material?.SurfaceFinish ?? "machined";
+            if (!SurfaceFactors.TryGetValue(finish, out var surface))
+            {
+                surface = SurfaceFactors["machined"];
+            }
+
+            double ka = surface.A * Math.Pow(ultimatePa / 1e6, surface.B);
+
+            double dMm = diameterM * 1000.0;
+            double kb;
+            if (dMm < 2.79) kb = 1.0;
+            else if (dMm <= 51.0) kb = 1.24 * Math.Pow(dMm, -0.107);
+            else if (dMm <= 254.0) kb = 1.51 * Math.Pow(dMm, -0.157);
+            else kb = 0.60;
+
+            return ka * kb * ReliabilityFactor99 * sePrime;
+        }
+
+        private static ShaftFeaResult? ReadFea(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
+            try
+            {
+                var fea = JsonSerializer.Deserialize<ShaftFeaResult>(json);
+                return fea is not null && fea.IsOk ? fea : null;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        public ShaftComparisonResult BuildShaftComparison(
+            Vessel vessel,
+            Impeller impeller,
+            FluidProperties fluid,
+            CalculationResult calculation,
+            ShaftPredictionResult? prediction)
+        {
+            if (vessel is null) throw new ArgumentNullException(nameof(vessel));
+            if (impeller is null) throw new ArgumentNullException(nameof(impeller));
+            if (fluid is null) throw new ArgumentNullException(nameof(fluid));
+            if (calculation is null) throw new ArgumentNullException(nameof(calculation));
+
+            double diameterM = calculation.RecommendedShaftDiameterMm / 1000.0;
+            var manual = ComputeManualPhysics(vessel, impeller, calculation.TorqueNm, diameterM, fluid.OperatingTemperatureC);
+
+            var fea = ReadFea(calculation.FeaCheckJson);
+            var pinn = prediction?.Physics;
+            bool pinnTrusted = prediction is not null && pinn is not null && prediction.IsTrusted;
+
+            double allowableShearMpa =
+                ComputeAllowableShearStressPa(impeller.ShaftMaterial, fluid.OperatingTemperatureC) / 1e6;
+            double shaftLengthM = ComputeShaftLengthM(vessel.LiquidHeightM);
+
+            double? feaDiameterMm = null;
+            if (fea is not null && fea.MaxShearMpa is double feaShear && feaShear > 0 && allowableShearMpa > 0)
+            {
+                feaDiameterMm = calculation.RecommendedShaftDiameterMm * Math.Cbrt(feaShear / allowableShearMpa);
+            }
+
+            var result = new ShaftComparisonResult
+            {
+                StandardShaftSizeMm = calculation.RecommendedShaftDiameterMm,
+                FeaAvailable = fea is not null,
+                ModelVersion = prediction?.ModelVersion ?? string.Empty,
+                PdeResidual = pinn?.PdeResidual ?? 0.0,
+                GeneratedAtUtc = DateTime.UtcNow
+            };
+
+            // ---- Side-by-side quantities: manual, FEA, PINN ----
+            result.Quantities.Add(new ShaftQuantityComparison
+            {
+                Name = "Shaft diameter (before rounding)",
+                Unit = "mm",
+                Manual = prediction is null ? calculation.RecommendedShaftDiameterMm : prediction.RawFormulaDiameterMm,
+                Fea = feaDiameterMm,
+                Pinn = prediction?.RawPredictedDiameterMm,
+                TolerancePercent = _comparison.DiameterTolerancePercent
+            });
+            result.Quantities.Add(new ShaftQuantityComparison
+            {
+                Name = "Tip deflection",
+                Unit = "mm",
+                Manual = manual.TipDeflectionMm,
+                Fea = fea?.TipDeflectionMm,
+                Pinn = pinn?.TipDeflectionMm,
+                TolerancePercent = _comparison.DeflectionTolerancePercent
+            });
+            result.Quantities.Add(new ShaftQuantityComparison
+            {
+                Name = "Angle of twist",
+                Unit = "deg",
+                Manual = manual.TwistDeg,
+                Fea = fea?.TwistDeg,
+                Pinn = pinn?.TwistDeg,
+                TolerancePercent = _comparison.TwistTolerancePercent
+            });
+            result.Quantities.Add(new ShaftQuantityComparison
+            {
+                Name = "Max shear stress",
+                Unit = "MPa",
+                Manual = manual.MaxShearMpa,
+                Fea = fea?.MaxShearMpa,
+                Pinn = pinn?.MaxShearStressMpa,
+                TolerancePercent = _comparison.DiameterTolerancePercent
+            });
+            result.Quantities.Add(new ShaftQuantityComparison
+            {
+                Name = "Von Mises stress",
+                Unit = "MPa",
+                Manual = manual.VonMisesMpa,
+                Fea = fea?.VonMisesMpa,
+                Pinn = pinn?.VonMisesStressMpa,
+                TolerancePercent = _comparison.DiameterTolerancePercent
+            });
+
+            // ---- Design checks: FEA first, then trusted PINN, then manual ----
+            (double Value, string Source) Pick(double? feaValue, double? pinnValue, double manualValue)
+            {
+                if (feaValue.HasValue) return (feaValue.Value, "FEA");
+                if (pinnTrusted && pinnValue.HasValue) return (pinnValue.Value, "PINN");
+                return (manualValue, "Manual");
+            }
+
+            var strength = Pick(fea?.MaxShearMpa, pinn?.MaxShearStressMpa, manual.MaxShearMpa);
+            result.Checks.Add(new ShaftCheckResult
+            {
+                Kind = ShaftCheckKind.Strength,
+                Name = "Strength (max shear stress)",
+                Unit = "MPa",
+                DemandValue = strength.Value,
+                CapacityValue = allowableShearMpa,
+                Source = strength.Source
+            });
+
+            var deflection = Pick(fea?.TipDeflectionMm, pinn?.TipDeflectionMm, manual.TipDeflectionMm);
+            result.Checks.Add(new ShaftCheckResult
+            {
+                Kind = ShaftCheckKind.Deflection,
+                Name = "Tip deflection",
+                Unit = "mm",
+                DemandValue = deflection.Value,
+                CapacityValue = _comparison.DeflectionLimitRatio * shaftLengthM * 1000.0,
+                Source = deflection.Source
+            });
+
+            var critical = Pick(null, pinn?.CriticalSpeedRpm, manual.CriticalSpeedRpm);
+            result.Checks.Add(new ShaftCheckResult
+            {
+                Kind = ShaftCheckKind.CriticalSpeed,
+                Name = "Operating speed vs critical speed",
+                Unit = "rpm",
+                DemandValue = impeller.RotationalSpeedRpm,
+                CapacityValue = _comparison.MaxCriticalSpeedRatio * critical.Value,
+                Source = critical.Source
+            });
+
+            var goodman = Pick(null, pinn?.GoodmanFactor, manual.GoodmanFactor);
+            result.Checks.Add(new ShaftCheckResult
+            {
+                Kind = ShaftCheckKind.Fatigue,
+                Name = "Fatigue (Goodman factor)",
+                Unit = "factor",
+                DemandValue = _comparison.RequiredFatigueFactor,
+                CapacityValue = Math.Min(goodman.Value, MaxReportedFactor),
+                Source = goodman.Source
+            });
+
+            // ---- Notes ----
+            if (fea is null)
+            {
+                result.Notes.Add("FEA result not available; checks use PINN (when trusted) or manual values.");
+            }
+
+            if (prediction is null)
+            {
+                result.Notes.Add("PINN prediction not available.");
+            }
+            else if (!prediction.IsTrusted)
+            {
+                result.Notes.Add("PINN result is not trusted; checks use FEA or manual values.");
+            }
+
+            if (prediction is not null && !string.IsNullOrWhiteSpace(prediction.Notes))
+            {
+                result.Notes.Add(prediction.Notes);
+            }
+
+            return result;
         }
     }
 }

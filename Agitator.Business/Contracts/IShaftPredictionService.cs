@@ -6,9 +6,10 @@ namespace Agitator.Business.Contracts
     public interface IShaftPredictionService
     {
         /// <summary>
-        /// Calls the Python PINN service for the shaft diameter, cross-checks it against
-        /// the formula result already stored in <paramref name="calculation"/>, and returns
-        /// the comparison with a trusted / not trusted flag.
+        /// Calls the Python PINN service for the shaft diameter and physics block, runs the FEA check,
+        /// and compares PINN, formula (Km = 1.5) and FEA results against the tolerances in
+        /// <c>ShaftComparisonOptions</c>.
+        /// Trust is judged against FEA first, then against the formula.
         /// The formula result is never replaced.
         /// Throws <see cref="InvalidOperationException"/> if the service is unreachable or returns an invalid response.
         /// </summary>

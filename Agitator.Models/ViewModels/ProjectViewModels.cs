@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using Agitator.Core.Entities;
+using Agitator.Models.DTOs;
 
 namespace Agitator.Models.ViewModel
 {
@@ -81,6 +82,10 @@ namespace Agitator.Models.ViewModel
         [Display(Name = "Number of impellers")]
         public int NumberOfImpellers { get; set; } = 1;
 
+        [Range(0, 50000)]
+        [Display(Name = "Impeller mass (kg)")]
+        public double ImpellerMassKg { get; set; } = 20;
+
         // Fluid
         [Range(1, 5000)]
         [Display(Name = "Fluid density (kg/m3)")]
@@ -117,5 +122,8 @@ namespace Agitator.Models.ViewModel
         public Impeller? Impeller { get; set; }
         public FluidProperties? FluidProperties { get; set; }
         public CalculationResult? CalculationResult { get; set; }
+
+        /// <summary>Manual vs FEA vs PINN comparison and design checks shown on the Results page.</summary>
+        public ShaftComparisonResult? ShaftComparison { get; set; }
     }
 }

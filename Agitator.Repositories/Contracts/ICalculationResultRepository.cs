@@ -11,5 +11,7 @@ namespace Agitator.Repositories.Contracts
         Task<(bool success, string? error)> SetReportPathAsync(int projectId, string reportPdfPath);
 
         Task<(bool success, string? error)> SetPredictionAsync(int projectId, string predictionJson, DateTime predictedAtUtc);
+
+        Task<(bool success, string? error)> SetComparisonAsync(int projectId, string comparisonJson, DateTime comparedAtUtc, bool passed);
     }
 }

@@ -39,6 +39,7 @@ builder.Services.Configure<CadIntegrationOptions>(builder.Configuration.GetSecti
 builder.Services.Configure<ReportGenerationOptions>(builder.Configuration.GetSection("ReportGeneration"));
 
 builder.Services.Configure<ShaftPredictionOptions>(builder.Configuration.GetSection("ShaftPredictionService"));
+builder.Services.Configure<ShaftComparisonOptions>(builder.Configuration.GetSection("ShaftComparison"));
 
 // --- Repositories / UnitOfWork ---
 builder.Services.AddScoped<IUnitOfWork, UnitOfWorks>();

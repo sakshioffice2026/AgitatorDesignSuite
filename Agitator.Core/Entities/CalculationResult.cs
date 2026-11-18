@@ -61,5 +61,24 @@ namespace Agitator.Core.Entities
         // --- Shaft FEA check ---
         public string? FeaCheckJson { get; set; }
         public DateTime? FeaCheckedAt { get; set; }
+
+        // --- Shaft comparison (manual vs FEA vs PINN) and design checks ---
+        public string? ComparisonJson { get; set; }
+        public DateTime? ComparedAt { get; set; }
+
+        /// <summary>Tip deflection from the manual cantilever formula (mm).</summary>
+        public double? TipDeflectionMm { get; set; }
+
+        /// <summary>Angle of twist from the manual formula (degrees).</summary>
+        public double? TwistDeg { get; set; }
+
+        /// <summary>First lateral critical speed (rpm).</summary>
+        public double? CriticalSpeedRpm { get; set; }
+
+        /// <summary>Goodman fatigue safety factor.</summary>
+        public double? GoodmanFactor { get; set; }
+
+        /// <summary>True when every design check and comparison passed.</summary>
+        public bool? ComparisonPassed { get; set; }
     }
 }

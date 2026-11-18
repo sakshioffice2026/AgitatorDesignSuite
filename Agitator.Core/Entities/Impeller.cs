@@ -47,6 +47,13 @@ namespace Agitator.Core.Entities
         [Range(0, 2)]
         public double ClearanceToDiameterRatio { get; set; } = 0.33;
 
+        /// <summary>
+        /// Impeller mass (kg) carried at the free end of the shaft.
+        /// Used for the critical speed calculation.
+        /// </summary>
+        [Range(0, 50000)]
+        public double ImpellerMassKg { get; set; }
+
 
         /// <summary>Shaft material and heat treatment (FK to ShaftMaterials).</summary>
         public int? ShaftMaterialId { get; set; }
