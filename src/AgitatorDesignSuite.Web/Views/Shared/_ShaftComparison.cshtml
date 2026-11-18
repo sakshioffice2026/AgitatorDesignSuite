@@ -1,0 +1,159 @@
+@using Agitator.Models.DTOs
+@model ShaftComparisonResult?
+@{
+    string Fmt(double? value)
+    {
+        if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value)) return "n/a";
+        double a = Math.Abs(value.Value);
+        string format = a == 0 ? "F2" : a < 1 ? "F4" : a < 100 ? "F2" : "F1";
+        return value.Value.ToString(format);
+    }
+
+    string FmtPercent(double? value) =>
+        value.HasValue ? value.Value.ToString("+0.00;-0.00;0.00") + " %" : "n/a";
+}
+
+@if (Model is null)
+{
+    <p class="text-muted mb-0">No comparison available yet. Generate the shaft prediction first.</p>
+}
+else
+{
+    @if (Model.OverallPassed)
+    {
+        <div class="alert alert-success py-2" role="status">
+            <i class="bi bi-check-circle-fill"></i>
+            All design checks pass and the PINN (AI) result agrees with the reference. Shaft size to use: @Model.StandardShaftSizeMm.ToString("F0") mm.
+        </div>
+    }
+    else if (Model.AllChecksPassed)
+    {
+        <div class="alert alert-warning py-2" role="alert">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            All design checks pass, but the PINN (AI) result is outside the allowed gap. Use the formula result and ask an engineer to review.
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-danger py-2" role="alert">
+            <i class="bi bi-x-circle-fill"></i>
+            At least one design check fails for a @Model.StandardShaftSizeMm.ToString("F0") mm shaft. Ask an engineer to review before use.
+        </div>
+    }
+
+    <h3 class="h6 mt-3">Manual vs FEA vs PINN (AI)</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-2">
+            <thead>
+                <tr>
+                    <th>Quantity</th>
+                    <th class="text-end">Manual</th>
+                    <th class="text-end">FEA</th>
+                    <th class="text-end">PINN (AI)</th>
+                    <th class="text-end">PINN gap</th>
+                    <th>Reference</th>
+                    <th>Agrees</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var q in Model.Quantities)
+                {
+                    <tr>
+                        <th>@q.Name <span class="text-muted small">(@q.Unit)</span></th>
+                        <td class="text-end">@Fmt(q.Manual)</td>
+                        <td class="text-end">@Fmt(q.Fea)</td>
+                        <td class="text-end">@Fmt(q.Pinn)</td>
+                        <td class="text-end">@FmtPercent(q.Fea.HasValue ? q.PinnVsFeaPercent : q.PinnVsManualPercent)</td>
+                        <td>@q.ReferenceName <span class="text-muted small">(limit @q.TolerancePercent.ToString("0.##") %)</span></td>
+                        <td>
+                            @if (q.PinnAgrees is null)
+                            {
+                                <span class="badge bg-secondary">n/a</span>
+                            }
+                            else if (q.PinnAgrees == true)
+                            {
+                                <span class="badge bg-success">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning text-dark">No</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (!Model.FeaAvailable)
+    {
+        <p class="text-muted small mb-2">FEA has not been run for this project, so the PINN is compared with the manual calculation only.</p>
+    }
+
+    <h3 class="h6 mt-3">Design checks (@Model.StandardShaftSizeMm.ToString("F0") mm shaft)</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-2">
+            <thead>
+                <tr>
+                    <th>Check</th>
+                    <th class="text-end">Used</th>
+                    <th class="text-end">Allowed</th>
+                    <th style="min-width:140px;">Utilisation</th>
+                    <th class="text-end">Margin</th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var c in Model.Checks)
+                {
+                    double pct = double.IsInfinity(c.Utilization) ? 100.0 : Math.Min(c.Utilization * 100.0, 100.0);
+                    string barClass = !c.Passed ? "bg-danger" : c.Utilization > 0.85 ? "bg-warning" : "bg-success";
+                    <tr>
+                        <th>@c.Name <span class="text-muted small">(@c.Unit)</span></th>
+                        <td class="text-end">@Fmt(c.DemandValue)</td>
+                        <td class="text-end">@Fmt(c.CapacityValue)</td>
+                        <td>
+                            <div class="progress" style="height:10px;" role="progressbar"
+                                 aria-label="@c.Name utilisation"
+                                 aria-valuenow="@pct.ToString("F0")" aria-valuemin="0" aria-valuemax="100">
+                                <div class="progress-bar @barClass" style="width:@pct.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                            </div>
+                            <span class="small text-muted">@(double.IsInfinity(c.Utilization) ? "n/a" : (c.Utilization * 100.0).ToString("F1") + " %")</span>
+                        </td>
+                        <td class="text-end">@(double.IsInfinity(c.Utilization) ? "n/a" : FmtPercent(c.MarginPercent))</td>
+                        <td>
+                            @if (c.Passed)
+                            {
+                                <span class="badge bg-success">Pass</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger">Fail</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (Model.GoverningCheck is not null)
+    {
+        <p class="mb-1">
+            Governing check: <strong>@Model.GoverningCheck.Name</strong>
+            at @((Model.GoverningCheck.Utilization * 100.0).ToString("F1")) % of its limit.
+        </p>
+    }
+
+    <p class="text-muted small mb-1">Shafts come in fixed sizes, so the exact calculated size is moved up to the next available size.</p>
+    <p class="text-muted small mb-2">
+        Model version @Model.ModelVersion, PDE residual @Model.PdeResidual.ToString("0.###e+0"),
+        generated @Model.GeneratedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC
+    </p>
+
+    @if (Model.Notes.Count > 0)
+    {
+        <div class="alert alert-secondary py-2 mb-0" role="note">
+            @string.Join(" ", Model.Notes)
+        </div>
+    }
+}
