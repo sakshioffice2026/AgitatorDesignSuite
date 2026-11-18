@@ -87,6 +87,65 @@ def combined_shear_stress_pa(rated_torque_nm: float, impeller_diameter_m: float,
     te = equivalent_torque_nm(rated_torque_nm, impeller_diameter_m, liquid_height_m)
     return (16.0 * te) / (math.pi * shaft_diameter_m ** 3)
 
+def shaft_length_m(liquid_height_m: float) -> float:
+    """Shaft length used for bending moment, deflection and twist (m)."""
+    return liquid_height_m * SHAFT_LENGTH_FACTOR
+
+
+def analytic_equivalent_torque_nm(rated_torque_nm: float, impeller_diameter_m: float,
+                                  liquid_height_m: float) -> float:
+    """Textbook equivalent torque, Km = Kt = 1: sqrt(M^2 + T^2)."""
+    m = bending_moment_nm(rated_torque_nm, impeller_diameter_m, liquid_height_m)
+    t = design_torque_nm(rated_torque_nm)
+    return math.sqrt(m * m + t * t)
+
+
+def analytic_diameter_m(rated_torque_nm: float, impeller_diameter_m: float,
+                        liquid_height_m: float,
+                        allowable_shear_pa: float = ALLOWABLE_SHEAR_STRESS_PA) -> float:
+    """Shaft diameter from plain max-shear theory (Km = 1), before rounding (m)."""
+    te = analytic_equivalent_torque_nm(rated_torque_nm, impeller_diameter_m, liquid_height_m)
+    return ((16.0 * te) / (math.pi * allowable_shear_pa)) ** (1.0 / 3.0)
+
+
+def bending_stress_pa(moment_nm: float, shaft_diameter_m: float) -> float:
+    """Outer-fibre bending stress sigma = 32 M / (pi d^3)."""
+    return 32.0 * abs(moment_nm) / (math.pi * shaft_diameter_m ** 3)
+
+
+def torsional_shear_stress_pa(torque_nm: float, shaft_diameter_m: float) -> float:
+    """Outer-fibre torsional shear stress tau = 16 T / (pi d^3)."""
+    return 16.0 * torque_nm / (math.pi * shaft_diameter_m ** 3)
+
+
+def tresca_shear_stress_pa(moment_nm: float, torque_nm: float,
+                           shaft_diameter_m: float) -> float:
+    """Maximum shear stress (Tresca): sqrt((sigma/2)^2 + tau^2)."""
+    sigma = bending_stress_pa(moment_nm, shaft_diameter_m)
+    tau = torsional_shear_stress_pa(torque_nm, shaft_diameter_m)
+    return math.sqrt((sigma / 2.0) ** 2 + tau ** 2)
+
+
+def von_mises_stress_pa(moment_nm: float, torque_nm: float,
+                        shaft_diameter_m: float) -> float:
+    """von Mises stress: sqrt(sigma^2 + 3 tau^2)."""
+    sigma = bending_stress_pa(moment_nm, shaft_diameter_m)
+    tau = torsional_shear_stress_pa(torque_nm, shaft_diameter_m)
+    return math.sqrt(sigma ** 2 + 3.0 * tau ** 2)
+
+
+def analytic_tip_deflection_m(radial_force_n_value: float, shaft_length_m_value: float,
+                              elastic_modulus_pa: float, shaft_diameter_m: float) -> float:
+    """Cantilever tip deflection F L^3 / (3 E I)."""
+    ei = elastic_modulus_pa * math.pi * shaft_diameter_m ** 4 / 64.0
+    return radial_force_n_value * shaft_length_m_value ** 3 / (3.0 * ei)
+
+
+def analytic_twist_rad(design_torque_nm_value: float, shaft_length_m_value: float,
+                       shear_modulus_pa: float, shaft_diameter_m: float) -> float:
+    """Angle of twist T L / (G J)."""
+    gj = shear_modulus_pa * math.pi * shaft_diameter_m ** 4 / 32.0
+    return design_torque_nm_value * shaft_length_m_value / gj
 
 def is_within_trusted_range(rated_torque_nm: float, impeller_diameter_m: float,
                             liquid_height_m: float) -> bool:

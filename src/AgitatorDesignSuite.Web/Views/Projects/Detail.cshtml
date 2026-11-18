@@ -1,4 +1,4 @@
-﻿@using Agitator.Models.ViewModel
+@using Agitator.Models.ViewModel
 @model ProjectDetailViewModel
 @{
     ViewData["Title"] = Model.Name;
@@ -35,8 +35,14 @@
                 <tr><th>Type</th><td>@Model.Impeller?.Type</td></tr>
                 <tr><th>Diameter</th><td>@Model.Impeller?.DiameterM.ToString("F3") m</td></tr>
                 <tr><th>Speed</th><td>@Model.Impeller?.RotationalSpeedRpm.ToString("F0") RPM</td></tr>
+                <tr><th>Impeller mass</th><td>@(Model.Impeller is { ImpellerMassKg: > 0 } ? Model.Impeller.ImpellerMassKg.ToString("F1") + " kg" : "Not specified")</td></tr>
                 <tr><th>Shaft material</th><td>@(Model.Impeller?.ShaftMaterial?.Grade ?? "Not specified")</td></tr>
                 <tr><th>Heat treatment</th><td>@(Model.Impeller?.ShaftMaterial?.HeatTreatment ?? "Not specified")</td></tr>
+                <tr><th>Elastic modulus</th><td>@(Model.Impeller?.ShaftMaterial?.ElasticModulusGpa is decimal e ? e.ToString("F1") + " GPa" : "-")</td></tr>
+                <tr><th>Poisson's ratio</th><td>@(Model.Impeller?.ShaftMaterial?.PoissonRatio is decimal p ? p.ToString("F3") : "-")</td></tr>
+                <tr><th>Density</th><td>@(Model.Impeller?.ShaftMaterial?.DensityKgM3 is decimal d ? d.ToString("F0") + " kg/m³" : "-")</td></tr>
+                <tr><th>Endurance limit</th><td>@(Model.Impeller?.ShaftMaterial?.EnduranceLimitMpa is decimal en ? en.ToString("F0") + " MPa" : "Default (0.5 × ultimate)")</td></tr>
+                <tr><th>Surface finish</th><td>@(Model.Impeller?.ShaftMaterial?.SurfaceFinish ?? "machined")</td></tr>
                 <tr><th>Operating temperature</th><td>@(Model.FluidProperties?.OperatingTemperatureC.ToString("F1") ?? "-") °C</td></tr>
             </table>
         </div>

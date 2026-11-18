@@ -35,6 +35,22 @@ else
                 <table class="table table-sm kv mb-0">
                     <tr><th>Shaft diameter</th><td>@r.RecommendedShaftDiameterMm.ToString("F1") mm</td></tr>
                     <tr><th>Motor rating</th><td>@r.RecommendedMotorPowerKw.ToString("F2") kW</td></tr>
+                    @if (r.TipDeflectionMm.HasValue)
+                    {
+                        <tr><th>Tip deflection (manual)</th><td>@r.TipDeflectionMm.Value.ToString("F3") mm</td></tr>
+                    }
+                    @if (r.TwistDeg.HasValue)
+                    {
+                        <tr><th>Angle of twist (manual)</th><td>@r.TwistDeg.Value.ToString("F3") °</td></tr>
+                    }
+                    @if (r.CriticalSpeedRpm.HasValue)
+                    {
+                        <tr><th>First critical speed</th><td>@r.CriticalSpeedRpm.Value.ToString("F0") rpm</td></tr>
+                    }
+                    @if (r.GoodmanFactor.HasValue)
+                    {
+                        <tr><th>Goodman fatigue factor</th><td>@r.GoodmanFactor.Value.ToString("F2")</td></tr>
+                    }
                 </table>
             </div>
         </div>
@@ -92,7 +108,9 @@ else
         }
         else
         {
-            bool aiAgrees = pred.IsTrusted && Math.Abs(pred.PredictedShaftDiameterMm - pred.FormulaShaftDiameterMm) < 0.05;
+            bool aiAgrees = Model.ShaftComparison is not null
+                ? Model.ShaftComparison.AllQuantitiesAgree
+                : pred.IsTrusted && Math.Abs(pred.PredictedShaftDiameterMm - pred.FormulaShaftDiameterMm) < 0.05;
             if (aiAgrees)
             {
                 <div class="alert alert-success py-2" role="status">
@@ -143,6 +161,9 @@ else
     double feaAllowable = 0;
     double feaUtilization = 0;
     bool feaPassed = false;
+    double? feaVonMises = null;
+    double? feaTipDeflection = null;
+    double? feaTwist = null;
     if (!string.IsNullOrWhiteSpace(r.FeaCheckJson))
     {
         try
@@ -156,6 +177,18 @@ else
                 feaAllowable = feaRoot.GetProperty("allowableShearMpa").GetDouble();
                 feaUtilization = feaRoot.GetProperty("utilization").GetDouble();
                 feaPassed = feaRoot.GetProperty("passed").GetBoolean();
+                if (feaRoot.TryGetProperty("feaVonMisesMpa", out var feaVmElement) && feaVmElement.ValueKind == System.Text.Json.JsonValueKind.Number)
+                {
+                    feaVonMises = feaVmElement.GetDouble();
+                }
+                if (feaRoot.TryGetProperty("feaTipDeflectionMm", out var feaTipElement) && feaTipElement.ValueKind == System.Text.Json.JsonValueKind.Number)
+                {
+                    feaTipDeflection = feaTipElement.GetDouble();
+                }
+                if (feaRoot.TryGetProperty("feaTwistDeg", out var feaTwistElement) && feaTwistElement.ValueKind == System.Text.Json.JsonValueKind.Number)
+                {
+                    feaTwist = feaTwistElement.GetDouble();
+                }
             }
             else
             {
@@ -202,6 +235,18 @@ else
                 <tr><th>FEA maximum shear stress</th><td>@feaStress.ToString("F2") MPa</td></tr>
                 <tr><th>Allowable shear stress</th><td>@feaAllowable.ToString("F1") MPa</td></tr>
                 <tr><th>Utilization</th><td>@((feaUtilization * 100.0).ToString("F0")) %</td></tr>
+                @if (feaVonMises.HasValue)
+                {
+                    <tr><th>FEA von Mises stress</th><td>@feaVonMises.Value.ToString("F2") MPa</td></tr>
+                }
+                @if (feaTipDeflection.HasValue)
+                {
+                    <tr><th>FEA tip deflection</th><td>@feaTipDeflection.Value.ToString("F3") mm</td></tr>
+                }
+                @if (feaTwist.HasValue)
+                {
+                    <tr><th>FEA angle of twist</th><td>@feaTwist.Value.ToString("F3") °</td></tr>
+                }
             </table>
             <p class="text-muted small mb-1">The FEA applies the real loads to a 3D model of the shaft. It does not include the 1.5 bending safety factor used in the formula, so its stress is normally lower than the formula stress.</p>
             <p class="text-muted small mb-0">Checked @r.FeaCheckedAt?.ToString("yyyy-MM-dd HH:mm") UTC</p>
@@ -212,6 +257,11 @@ else
                 <i class="bi bi-exclamation-triangle-fill"></i> The FEA check could not be completed. @feaError
             </div>
         }
+    </div>
+
+    <div class="panel mt-3">
+        <h2 class="h6">Shaft Comparison and Design Checks</h2>
+        <partial name="_ShaftComparison" model="Model.ShaftComparison" />
     </div>
 
     <div class="d-flex gap-2 my-3">
