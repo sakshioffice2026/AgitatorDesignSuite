@@ -36,6 +36,7 @@ namespace Agitator.Business.Services
     CalculationResult calculation,
     CancellationToken cancellationToken = default)
         {
+            if (vessel is null) throw new ArgumentNullException(nameof(vessel));
             if (impeller is null) throw new ArgumentNullException(nameof(impeller));
             if (fluid is null) throw new ArgumentNullException(nameof(fluid));
             if (calculation is null) throw new ArgumentNullException(nameof(calculation));
@@ -48,7 +49,10 @@ namespace Agitator.Business.Services
             double yieldAtTempMpa = material is null
                 ? 0.0
                 : AgitatorCalculationService.ComputeYieldAtTemperatureMpa(material, fluid.OperatingTemperatureC);
-            double ultimateMpa = (double?)material?.UltimateStrengthMpa ?? 0.0;
+            double strengthFactor = material is null || material.YieldStrengthMpa <= 0
+    ? 1.0
+    : yieldAtTempMpa / (double)material.YieldStrengthMpa;
+            double ultimateMpa = ((double?)material?.UltimateStrengthMpa ?? 0.0) * strengthFactor;
 
             var request = new ShaftPredictionRequest
             {
@@ -65,7 +69,7 @@ namespace Agitator.Business.Services
                 DensityKgM3 = (double?)material?.DensityKgM3 ?? 7850.0,
                 YieldStrengthMpa = yieldAtTempMpa,
                 UltimateStrengthMpa = ultimateMpa,
-                EnduranceLimitMpa = (double?)material?.EnduranceLimitMpa ?? 0.5 * ultimateMpa,
+                EnduranceLimitMpa = (double?)material?.EnduranceLimitMpa ?? Math.Min(0.5 * ultimateMpa, 700.0),
                 SurfaceFinish = material?.SurfaceFinish ?? "machined",
                 ShaftDiameterMm = calculation.RecommendedShaftDiameterMm
             };

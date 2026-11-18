@@ -155,7 +155,8 @@ def critical_speed_rpm(d_m: float, length_m: float, tip_mass_kg: float,
                        added_mass_kg: float = 0.0) -> float:
     """
     method : "rayleigh", "dunkerley" or "closed_form"
-    added_mass_kg : liquid mass carried by the impeller (hydrodynamic added mass)
+        added_mass_kg : liquid mass carried by the impeller (hydrodynamic added mass). Default 0 matches
+                    the .NET engine, which calculates critical speed in air; a real value lowers the result.
     """
     m_tip = tip_mass_kg + added_mass_kg
     if method == "rayleigh":
@@ -175,13 +176,16 @@ def speed_ratio(operating_rpm: float, critical_rpm: float) -> float:
 
 
 def is_speed_safe(operating_rpm: float, critical_rpm: float,
-                  max_ratio: float = 0.7, min_ratio_supercritical: float = 1.3) -> bool:
+                  max_ratio: float = 0.7, min_ratio_supercritical: float = None) -> bool:
     """
-    Subcritical : ratio <= max_ratio
-    Supercritical : ratio >= min_ratio_supercritical (the shaft must pass through resonance)
+    Subcritical : ratio <= max_ratio (same rule as AgitatorCalculationService.cs)
+    Supercritical : only when min_ratio_supercritical is given (e.g. 1.3); the shaft must pass
+    through resonance, so this is opt-in and never used by the .NET engine.
     """
     r = speed_ratio(operating_rpm, critical_rpm)
-    return r <= max_ratio or r >= min_ratio_supercritical
+    if r <= max_ratio:
+        return True
+    return min_ratio_supercritical is not None and r >= min_ratio_supercritical
 
 
 def minimum_diameter_for_critical_speed_m(operating_rpm: float, length_m: float,

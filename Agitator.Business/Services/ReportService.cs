@@ -96,7 +96,7 @@ namespace Agitator.Business.Services
                             table.ColumnsDefinition(c => { c.RelativeColumn(); c.RelativeColumn(); });
                             AddRow(table, "Density", $"{fluid.DensityKgM3:F1} kg/m3");
                             AddRow(table, "Viscosity", $"{fluid.ViscosityPaS:F4} Pa.s");
-                            AddRow(table, "Behavior", fluid.IsNewtonian ? "Newtonian" : "Non-Newtonian");
+                            AddRow(table, "Behavior", fluid.IsNewtonian ? "Newtonian" : "Non-Newtonian (calculated as Newtonian, results not valid)");
                             AddRow(table, "Operating temperature", $"{fluid.OperatingTemperatureC:F1} °C");
                         });
 
@@ -210,10 +210,10 @@ namespace Agitator.Business.Services
                             }
                         }
 
-                        col.Item().PaddingTop(15).Background(Colors.Grey.Lighten3).Padding(8).Text(
-                            "Disclaimer: This datasheet is generated for preliminary design reference only. " +
-                            "All calculated values must be independently reviewed and approved by a licensed " +
-                            "Professional Engineer prior to procurement, fabrication, or installation.")
+                        col.Item().Text(
+                            "Basis: Newtonian fluid; baffle and multi-impeller power corrections are empirical; " +
+                            "shaft length is estimated as 1.15 x liquid height; critical speed is calculated in air " +
+                            "(no liquid added mass) with the shaft treated as a cantilever.")
                             .FontSize(8).Italic();
                     });
 

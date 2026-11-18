@@ -65,6 +65,8 @@ namespace Agitator.Business.Services
         private const double EquivalentShaftMassFraction = 33.0 / 140.0;
         private const double ReliabilityFactor99 = 0.814;
         private const double EnduranceLimitCapPa = 700e6;
+        // Fatigue stress concentration on alternating bending (keyseat / shoulder).
+        private const double KeywayFatigueKf = 1.7;
         private const double MaxReportedFactor = 999.0;
 
         // Surface finish constants (Sut in MPa): ka = a * Sut^b.
@@ -218,14 +220,7 @@ namespace Agitator.Business.Services
                     return turbulentNp;
 
                 default:
-                    double npAtLaminarEnd = data.Kp / data.LaminarReCutoff;
-                    double logRe = Math.Log10(reynolds);
-                    double logLow = Math.Log10(data.LaminarReCutoff);
-                    double logHigh = Math.Log10(data.TurbulentReCutoff);
-                    double t = (logRe - logLow) / (logHigh - logLow);
-                    double logNp = Math.Log10(npAtLaminarEnd) +
-                                   t * (Math.Log10(turbulentNp) - Math.Log10(npAtLaminarEnd));
-                    return Math.Pow(10, logNp);
+                    return Math.Max(data.Kp / reynolds, turbulentNp);
             }
         }
 
@@ -310,7 +305,8 @@ namespace Agitator.Business.Services
                     return diameterM;
             }
 
-            return stressDiameterM;
+            throw new InvalidOperationException(
+                "No standard shaft size up to 300 mm satisfies deflection, critical speed and fatigue limits.");
         }
 
         /// <summary>Exact (unrounded) smallest diameter passing stress, deflection and critical speed.</summary>
@@ -492,7 +488,8 @@ namespace Agitator.Business.Services
             double yieldPa = (material is null
                 ? FallbackYieldMpa
                 : ComputeYieldAtTemperatureMpa(material, temperatureC)) * 1e6;
-            double ultimatePa = ((double?)material?.UltimateStrengthMpa ?? FallbackUltimateMpa) * 1e6;
+            double ultimatePa = ((double?)material?.UltimateStrengthMpa ?? FallbackUltimateMpa) * 1e6
+    * (material is null ? 1.0 : GetStrengthFactor(material, temperatureC));
 
             double iM4 = Math.PI * Math.Pow(diameterM, 4) / 64.0;
             double jM4 = 2.0 * iM4;
@@ -514,7 +511,7 @@ namespace Agitator.Business.Services
             double criticalRpm = omega * 60.0 / (2.0 * Math.PI);
 
             double sePa = CorrectedEnduranceLimitPa(material, ultimatePa, diameterM);
-            double sigmaA = sigmaB;
+            double sigmaA = KeywayFatigueKf * sigmaB;
             double sigmaM = Math.Sqrt(3.0) * tauT;
 
             return new ManualShaftPhysics(
@@ -623,6 +620,7 @@ namespace Agitator.Business.Services
                 ModelVersion = prediction?.ModelVersion ?? string.Empty,
                 PdeResidual = pinn?.PdeResidual ?? 0.0,
                 PinnSkipped = prediction is not null && !prediction.WithinTrustedRange,
+                GeneratedAtUtc = DateTime.UtcNow,
             };
 
             // ---- Side-by-side quantities: manual, FEA, PINN ----

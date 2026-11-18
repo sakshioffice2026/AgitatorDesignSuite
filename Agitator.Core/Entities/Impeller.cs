@@ -41,14 +41,14 @@ namespace Agitator.Core.Entities
         public int NumberOfImpellers { get; set; } = 1;
 
         /// <summary>
-        /// Off-bottom clearance as a fraction of vessel diameter, typically ~1/3.
+        /// Off-bottom clearance C/T: clearance as a fraction of VESSEL diameter, typically ~1/3.
         /// Used to estimate impeller spacing for multi-impeller power.
         /// </summary>
-        [Range(0, 2)]
+        [Range(0, 1)]
         public double ClearanceToDiameterRatio { get; set; } = 0.33;
 
         /// <summary>
-        /// Impeller mass (kg) carried at the free end of the shaft.
+        /// Total mass (kg) of all impellers and hubs carried by the shaft.
         /// Used for the critical speed calculation.
         /// </summary>
         [Range(0, 50000)]

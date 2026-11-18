@@ -18,7 +18,7 @@ namespace Agitator.Core.Entities
         [Column(TypeName = "decimal(6,1)")]
         public decimal TemperatureC { get; set; }
 
-        /// <summary>Multiplier applied to room temperature yield strength (1.0 = no reduction).</summary>
+        /// <summary>Multiplier applied to room temperature yield AND ultimate strength (1.0 = no reduction). Elastic modulus is not derated.</summary>
         [Column(TypeName = "decimal(5,4)")]
         public decimal StrengthFactor { get; set; }
     }

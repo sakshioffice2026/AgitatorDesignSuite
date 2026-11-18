@@ -18,6 +18,11 @@ namespace Agitator.Core.Entities
         [Range(0.0001, 1000)]
         public double ViscosityPaS { get; set; } = 0.001;
 
+        /// <summary>
+        /// Rheology flag. The calculation engine treats every fluid as Newtonian, so a value of false
+        /// is not corrected for shear-thinning or shear-thickening (no Metzner-Otto shear-rate viscosity).
+        /// Power, Reynolds number and regime are not valid for non-Newtonian fluids.
+        /// </summary>
         public bool IsNewtonian { get; set; } = true;
 
 

@@ -33,7 +33,7 @@ namespace Agitator.Core.Entities
         [Column(TypeName = "decimal(6,1)")]
         public decimal MaxOperatingTempC { get; set; }
 
-        /// <summary>Elastic modulus at room temperature (GPa).</summary>
+        /// <summary>Elastic modulus at room temperature (GPa). Not temperature-derated: deflection and critical speed are unconservative at high temperature (modulus drops roughly 5% at 300 °C for carbon steel).</summary>
         [Column(TypeName = "decimal(7,2)")]
         public decimal? ElasticModulusGpa { get; set; }
 
@@ -45,7 +45,7 @@ namespace Agitator.Core.Entities
         [Column(TypeName = "decimal(8,2)")]
         public decimal? DensityKgM3 { get; set; }
 
-        /// <summary>Measured rotating-beam endurance limit at room temperature (MPa). Null means 0.5 x ultimate strength.</summary>
+        /// <summary>Measured rotating-beam endurance limit Se' at room temperature (MPa), before Marin factors. Null means 0.5 x ultimate strength, capped at 700 MPa. Not temperature-derated in the database; the engine derates it with the strength factor.</summary>
         [Column(TypeName = "decimal(8,2)")]
         public decimal? EnduranceLimitMpa { get; set; }
 

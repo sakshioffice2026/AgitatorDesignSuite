@@ -54,7 +54,7 @@ import traceback
 
 END_EXCLUDE_FRACTION = 0.05
 
-DEFAULT_ELASTIC_MODULUS_GPA = 210.0
+DEFAULT_ELASTIC_MODULUS_GPA = 200.0
 DEFAULT_POISSON_RATIO = 0.30
 DEFAULT_DENSITY_KG_M3 = 7850.0
 
@@ -266,9 +266,10 @@ def run_fea(params, bin_dir):
             raise RuntimeError("No FEA result")
 
         nodes = mesh.FemMesh.Nodes
-        end_margin = max(END_EXCLUDE_FRACTION * length_mm, 0.75 * diameter_mm)
-        z_lo = end_margin
-        z_hi = length_mm - end_margin
+        root_margin = 0.75 * diameter_mm
+        tip_margin = max(END_EXCLUDE_FRACTION * length_mm, 0.75 * diameter_mm)
+        z_lo = root_margin
+        z_hi = length_mm - tip_margin
         if z_hi <= z_lo:
             raise RuntimeError("Shaft too short for stress window")
 

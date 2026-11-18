@@ -140,7 +140,7 @@ namespace Agitator.Business.Services
             // treat CAD output as fabrication-ready until this is backed by
             // a real project input.
             const double placeholderWallThicknessMm = 6.0; // thin-wall SS default; replace with a real Vessel.WallThicknessMm field
-            double shaftTotalLengthMm = vessel.LiquidHeightM * 1000 * 1.15;
+            double shaftTotalLengthMm = AgitatorCalculationService.ComputeShaftLengthM(vessel.LiquidHeightM) * 1000.0;
 
             var parameters = new
             {

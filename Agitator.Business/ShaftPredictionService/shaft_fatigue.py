@@ -43,8 +43,7 @@ RELIABILITY_FACTORS = {
 }
 
 ENDURANCE_LIMIT_CAP_PA = 700e6   # Se' = 0.5 Sut, capped for Sut > 1400 MPa
-LARGE_SIZE_FACTOR = 0.60         # conservative kb for d > 254 mm
-D_MIN_SEARCH_M = 0.005
+DEFAULT_KF = 1.7                 # keyseat / shoulder fatigue stress concentration; must equal KeywayFatigueKf in AgitatorCalculationService.csD_MIN_SEARCH_M = 0.005
 D_MAX_SEARCH_M = 1.0
 
 
@@ -123,7 +122,7 @@ def corrected_endurance_limit_pa(material: FatigueMaterial, diameter_m: float) -
 # Stresses
 # ---------------------------------------------------------------------------
 def alternating_mean_stress_pa(moment_nm: float, torque_nm: float, diameter_m: float,
-                               kf: float = 1.0, kfs: float = 1.0):
+                                                             kf: float = DEFAULT_KF, kfs: float = 1.0):
     """Von Mises alternating and mean stress for reversed bending + steady torsion."""
     sigma_b = 32.0 * moment_nm / (math.pi * diameter_m ** 3)
     tau_t = 16.0 * torque_nm / (math.pi * diameter_m ** 3)
@@ -155,7 +154,7 @@ def first_cycle_yield_factor(sigma_a: float, sigma_m: float, sy: float) -> float
 # ---------------------------------------------------------------------------
 def fatigue_check(moment_nm: float, torque_nm: float, diameter_m: float,
                   material: FatigueMaterial, required_factor: float = 1.5,
-                  kf: float = 1.0, kfs: float = 1.0) -> FatigueResult:
+                                   kf: float = DEFAULT_KF, kfs: float = 1.0) -> FatigueResult:
     se = corrected_endurance_limit_pa(material, diameter_m)
     sigma_a, sigma_m = alternating_mean_stress_pa(moment_nm, torque_nm, diameter_m, kf, kfs)
 
@@ -178,7 +177,7 @@ def fatigue_check(moment_nm: float, torque_nm: float, diameter_m: float,
 def fatigue_check_from_inputs(rated_torque_nm: float, impeller_diameter_m: float,
                               liquid_height_m: float, diameter_m: float,
                               material: FatigueMaterial, required_factor: float = 1.5,
-                              kf: float = 1.0, kfs: float = 1.0) -> FatigueResult:
+                                                          kf: float = DEFAULT_KF, kfs: float = 1.0) -> FatigueResult:
     """Same load path as shaft_physics.py: design torque and bending moment from the 3 inputs."""
     moment = bending_moment_nm(rated_torque_nm, impeller_diameter_m, liquid_height_m)
     torque = design_torque_nm(rated_torque_nm)
@@ -187,7 +186,7 @@ def fatigue_check_from_inputs(rated_torque_nm: float, impeller_diameter_m: float
 
 def minimum_fatigue_diameter_m(moment_nm: float, torque_nm: float,
                                material: FatigueMaterial, required_factor: float = 1.5,
-                               kf: float = 1.0, kfs: float = 1.0,
+                                                             kf: float = DEFAULT_KF, kfs: float = 1.0,
                                criterion: str = "goodman") -> float:
     """
     Smallest diameter whose governing safety factor reaches required_factor.

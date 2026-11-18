@@ -15,13 +15,15 @@ Units (all SI):
 import math
 
 # ---- Constants (must match AgitatorCalculationService.cs) -------------------
+# Fallback only (mild carbon steel, room temperature). The service passes the material- and
+# temperature-based allowable from the .NET request; fea_dataset_generator.py still uses this default.
 ALLOWABLE_SHEAR_STRESS_PA = 40_000_000.0
 BENDING_FACTOR_KM = 1.5
 TORSION_FACTOR_KT = 1.0
 RADIAL_FORCE_FRACTION = 0.5
 MOTOR_SERVICE_FACTOR = 1.25
 EFFECTIVE_RADIUS_FRACTION = 0.75
-SHAFT_LENGTH_FACTOR = 1.15
+SHAFT_LENGTH_FACTOR = 1.15   # estimate only; must equal AgitatorCalculationService.ComputeShaftLengthM
 
 STANDARD_SHAFT_SIZES_MM = [
     20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100,

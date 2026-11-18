@@ -6,6 +6,16 @@
 @{
     ViewData["Title"] = "Results";
     var r = Model.CalculationResult;
+
+    string FmtNum(double? value)
+    {
+        if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value)) return "n/a";
+        double a = Math.Abs(value.Value);
+        string format = a == 0 ? "F2" : a < 1 ? "F4" : a < 100 ? "F2" : "F1";
+        return value.Value.ToString(format);
+    }
+
+    string FmtPct(double value) => value.ToString("+0.00;-0.00;0.00") + " %";
 }
 <h1 class="mb-1">@Model.Name</h1>
 <p class="mb-4" style="color:#64748B;font-size:0.9rem;">Calculated results and mechanical recommendations.</p>
@@ -15,76 +25,11 @@
 }
 else
 {
-    <div class="row g-3">
-        <div class="col-md-6 d-flex">
-            <div class="panel w-100">
-                <h2 class="h6">Process Results</h2>
-                <table class="table table-sm kv mb-0">
-                    <tr><th>Reynolds number</th><td>@r.ReynoldsNumber.ToString("F0") (@r.Regime)</td></tr>
-                    <tr><th>Power number (Np)</th><td>@r.PowerNumber.ToString("F3")</td></tr>
-                    <tr><th>Power draw</th><td>@r.PowerDrawWatts.ToString("F0") W</td></tr>
-                    <tr><th>Torque</th><td>@r.TorqueNm.ToString("F2") N·m</td></tr>
-                    <tr><th>Tip speed</th><td>@r.TipSpeedMPerS.ToString("F2") m/s</td></tr>
-                </table>
-            </div>
-        </div>
-
-        <div class="col-md-6 d-flex">
-            <div class="panel w-100">
-                <h2 class="h6">Mechanical Recommendations</h2>
-                <table class="table table-sm kv mb-0">
-                    <tr><th>Shaft diameter</th><td>@r.RecommendedShaftDiameterMm.ToString("F1") mm</td></tr>
-                    <tr><th>Motor rating</th><td>@r.RecommendedMotorPowerKw.ToString("F2") kW</td></tr>
-                    @if (r.TipDeflectionMm.HasValue)
-                    {
-                        <tr><th>Tip deflection (manual)</th><td>@r.TipDeflectionMm.Value.ToString("F3") mm</td></tr>
-                    }
-                    @if (r.TwistDeg.HasValue)
-                    {
-                        <tr><th>Angle of twist (manual)</th><td>@r.TwistDeg.Value.ToString("F3") °</td></tr>
-                    }
-                    @if (r.CriticalSpeedRpm.HasValue)
-                    {
-                        <tr><th>First critical speed</th><td>@r.CriticalSpeedRpm.Value.ToString("F0") rpm</td></tr>
-                    }
-                    @if (r.GoodmanFactor.HasValue)
-                    {
-                        <tr><th>Goodman fatigue factor</th><td>@r.GoodmanFactor.Value.ToString("F2")</td></tr>
-                    }
-                </table>
-            </div>
-        </div>
-    </div>
-
     var shaftMat = Model.Impeller?.ShaftMaterial;
     var opTemp = Model.FluidProperties?.OperatingTemperatureC ?? 30;
     var allowableMpa = AgitatorCalculationService.ComputeAllowableShearStressPa(shaftMat, opTemp) / 1_000_000.0;
-
-    <div class="row g-3 mt-0">
-        <div class="col-12">
-            <div class="panel">
-                <h2 class="h6">Shaft Design Basis</h2>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <table class="table table-sm kv mb-0">
-                            <tr><th>Shaft material</th><td>@(shaftMat?.Grade ?? "Not specified")</td></tr>
-                            <tr><th>Heat treatment</th><td>@(shaftMat?.HeatTreatment ?? "Not specified")</td></tr>
-                            <tr><th>Operating temperature</th><td>@opTemp.ToString("F1") °C</td></tr>
-                        </table>
-                    </div>
-                    <div class="col-md-6">
-                        <table class="table table-sm kv mb-0">
-                            @if (shaftMat is not null)
-                            {
-                                <tr><th>Yield strength at temperature</th><td>@AgitatorCalculationService.ComputeYieldAtTemperatureMpa(shaftMat, opTemp).ToString("F1") MPa</td></tr>
-                            }
-                            <tr><th>Allowable shear stress</th><td>@allowableMpa.ToString("F1") MPa</td></tr>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    bool hasPrediction = !string.IsNullOrWhiteSpace(r.PredictionJson);
+    bool cadBusy = r.CadStatus == CadJobStatus.Queued || r.CadStatus == CadJobStatus.Running;
 
     string? feaStatus = null;
     string? feaError = null;
@@ -140,12 +85,133 @@ else
         }
     }
 
-    <div class="panel mt-3">
-        <h2 class="h6">Shaft FEA Check (Finite Element Analysis)</h2>
+    var badgeClass = r.CadStatus switch
+    {
+        CadJobStatus.Completed => "bg-success",
+        CadJobStatus.Failed => "bg-danger",
+        CadJobStatus.Running => "bg-warning text-dark",
+        CadJobStatus.Queued => "bg-primary",
+        _ => "bg-secondary"
+    };
 
+    @* ===================== SECTION 1: CALCULATED RESULTS ===================== *@
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="h5 mb-0">1. Calculated results</h2>
+        <a class="btn btn-outline-secondary btn-sm" href="/Projects/DownloadReport/@Model.Id"><i class="bi bi-file-earmark-pdf"></i> Download PDF Datasheet</a>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6 d-flex">
+            <div class="panel w-100">
+                <h3 class="h6">Process Results</h3>
+                <table class="table table-sm kv mb-0">
+                    <tr><th>Reynolds number</th><td>@r.ReynoldsNumber.ToString("F0") (@r.Regime)</td></tr>
+                    <tr><th>Power number (Np)</th><td>@r.PowerNumber.ToString("F3")</td></tr>
+                    <tr><th>Power draw</th><td>@r.PowerDrawWatts.ToString("F0") W</td></tr>
+                    <tr><th>Torque</th><td>@r.TorqueNm.ToString("F2") N·m</td></tr>
+                    <tr><th>Tip speed</th><td>@r.TipSpeedMPerS.ToString("F2") m/s</td></tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="col-md-6 d-flex">
+            <div class="panel w-100">
+                <h3 class="h6">Mechanical Recommendations</h3>
+                <table class="table table-sm kv mb-0">
+                    <tr><th>Shaft diameter</th><td>@r.RecommendedShaftDiameterMm.ToString("F1") mm</td></tr>
+                    <tr><th>Motor rating</th><td>@r.RecommendedMotorPowerKw.ToString("F2") kW</td></tr>
+                    @if (r.TipDeflectionMm.HasValue)
+                    {
+                        <tr><th>Tip deflection (manual)</th><td>@r.TipDeflectionMm.Value.ToString("F3") mm</td></tr>
+                    }
+                    @if (r.TwistDeg.HasValue)
+                    {
+                        <tr><th>Angle of twist (manual)</th><td>@r.TwistDeg.Value.ToString("F3") °</td></tr>
+                    }
+                    @if (r.CriticalSpeedRpm.HasValue)
+                    {
+                        <tr><th>First critical speed</th><td>@r.CriticalSpeedRpm.Value.ToString("F0") rpm</td></tr>
+                    }
+                    @if (r.GoodmanFactor.HasValue)
+                    {
+                        <tr><th>Goodman fatigue factor</th><td>@r.GoodmanFactor.Value.ToString("F2")</td></tr>
+                    }
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel mt-3">
+        <h3 class="h6">Shaft Design Basis</h3>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <table class="table table-sm kv mb-0">
+                    <tr><th>Shaft material</th><td>@(shaftMat?.Grade ?? "Not specified")</td></tr>
+                    <tr><th>Heat treatment</th><td>@(shaftMat?.HeatTreatment ?? "Not specified")</td></tr>
+                    <tr><th>Operating temperature</th><td>@opTemp.ToString("F1") °C</td></tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <table class="table table-sm kv mb-0">
+                    @if (shaftMat is not null)
+                    {
+                        <tr><th>Yield strength at temperature</th><td>@AgitatorCalculationService.ComputeYieldAtTemperatureMpa(shaftMat, opTemp).ToString("F1") MPa</td></tr>
+                    }
+                    <tr><th>Allowable shear stress</th><td>@allowableMpa.ToString("F1") MPa</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @* ===================== SECTION 2: 3D MODEL + FEA ===================== *@
+    <div id="model-section" class="panel mt-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <h2 class="h5 mb-0">2. 3D model and FEA check</h2>
+            <div class="d-flex gap-2">
+                <form asp-action="RequestCadModel" asp-route-id="@Model.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-primary btn-sm" disabled="@cadBusy"><i class="bi bi-box"></i> Generate 3D Model (FreeCAD)</button>
+                </form>
+                @if (r.CadStatus == CadJobStatus.Failed)
+                {
+                    <form asp-action="ChangeStatus" asp-route-id="@Model.Id" method="post">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-outline-warning btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reset Status</button>
+                    </form>
+                }
+            </div>
+        </div>
+        <p class="text-muted small">Generating the 3D model also runs the shaft FEA check. Both finish before the status shows Completed.</p>
+
+        <p class="mb-2">Status: <span id="cad-badge" class="badge @badgeClass">@r.CadStatus</span></p>
+        @if (r.CadStatus == CadJobStatus.Completed && r.CadStepFilePath != null)
+        {
+            <div id="viewer-container"
+                 data-step-url="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"
+                 data-preview-url="@(string.IsNullOrEmpty(r.CadPreviewMeshPath) ? null : Url.Action("PreviewMesh", "Projects", new { id = Model.Id }))"
+                 style="width:100%;height:500px;background:#f1f5f9;border-radius:6px;"></div>
+            <p class="mt-2"><a href="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"><i class="bi bi-download"></i> Download STEP file</a></p>
+        }
+        else if (r.CadStatus == CadJobStatus.Failed)
+        {
+            <div class="alert alert-danger py-2" role="alert"><i class="bi bi-x-circle"></i> 3D model generation failed. @r.CadJobError</div>
+        }
+        else if (cadBusy)
+        {
+            <div id="cad-progress" class="alert alert-info py-2 d-flex align-items-center gap-2" role="status">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <span id="cad-progress-text">Model generation in progress. This page updates automatically.</span>
+            </div>
+        }
+        else
+        {
+            <p class="text-muted">No 3D model generated yet. Click "Generate 3D Model (FreeCAD)".</p>
+        }
+
+        <h3 class="h6 mt-4">Shaft FEA check (Finite Element Analysis)</h3>
         @if (string.IsNullOrWhiteSpace(r.FeaCheckJson))
         {
-            <p class="text-muted mb-0">The FEA check runs automatically after "Generate 3D Model (FreeCAD)".</p>
+            <p class="text-muted mb-0">Not run yet. The FEA check runs automatically after "Generate 3D Model (FreeCAD)".</p>
         }
         else if (feaStatus == "ok")
         {
@@ -190,74 +256,83 @@ else
         }
     </div>
 
-    <div class="panel mt-3">
-        <h2 class="h6">Shaft Comparison and Design Checks</h2>
-        <partial name="_ShaftComparison" model="Model.ShaftComparison" />
-    </div>
-
-    <div class="d-flex gap-2 my-3">
-        <a class="btn btn-outline-secondary" href="/Projects/DownloadReport/@Model.Id"><i class="bi bi-file-earmark-pdf"></i> Download PDF Datasheet</a>
-
-        <form asp-action="RequestCadModel" asp-route-id="@Model.Id" method="post">
-            @Html.AntiForgeryToken()
-            <button type="submit" class="btn btn-primary"><i class="bi bi-box"></i> Generate 3D Model (FreeCAD)</button>
-        </form>
-
-        <form asp-action="GeneratePrediction" asp-route-id="@Model.Id" method="post">
-            @Html.AntiForgeryToken()
-            <button type="submit" class="btn btn-outline-primary"><i class="bi bi-cpu"></i> Generate Shaft Prediction (PINN)</button>
-        </form>
-
-        @if (r.CadStatus == CadJobStatus.Failed)
-        {
-            <form asp-action="ChangeStatus" asp-route-id="@Model.Id" method="post">
+    @* ===================== SECTION 3: DESIGN CHECKS + PINN ===================== *@
+    <div id="pinn-section" class="panel mt-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <h2 class="h5 mb-0">3. Design checks and AI (PINN) comparison</h2>
+            <form asp-action="GeneratePrediction" asp-route-id="@Model.Id" method="post">
                 @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-outline-warning"><i class="bi bi-arrow-counterclockwise"></i> Reset Status</button>
+                <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-cpu"></i> @(hasPrediction ? "Regenerate Shaft Prediction (PINN)" : "Generate Shaft Prediction (PINN)")</button>
             </form>
-        }
-    </div>
+        </div>
 
-    <div class="panel">
-        @{
-            var badgeClass = r.CadStatus switch
-            {
-                CadJobStatus.Completed => "bg-success",
-                CadJobStatus.Failed => "bg-danger",
-                CadJobStatus.Running => "bg-warning text-dark",
-                CadJobStatus.Queued => "bg-primary",
-                _ => "bg-secondary"
-            };
-        }
-        <h2 class="h6">3D Model Status: <span id="cad-badge" class="badge @badgeClass">@r.CadStatus</span></h2>
-        @if (r.CadStatus == CadJobStatus.Completed && r.CadStepFilePath != null)
+        @if (hasPrediction)
         {
-            <div class="alert alert-success py-2" role="alert"><i class="bi bi-check-circle"></i> 3D model generated successfully.</div>
-            <div id="viewer-container"
-                 data-step-url="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"
-                 data-preview-url="@(string.IsNullOrEmpty(r.CadPreviewMeshPath) ? null : Url.Action("PreviewMesh", "Projects", new { id = Model.Id }))"
-                 style="width:100%;height:500px;background:#f1f5f9;border-radius:6px;"></div>
-            <p class="mt-2"><a href="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"><i class="bi bi-download"></i> Download STEP file</a></p>
-        }
-        else if (r.CadStatus == CadJobStatus.Failed)
-        {
-            <div class="alert alert-danger py-2" role="alert"><i class="bi bi-x-circle"></i> 3D model generation failed. @r.CadJobError</div>
-        }
-        else if (r.CadStatus == CadJobStatus.Queued || r.CadStatus == CadJobStatus.Running)
-        {
-            <div id="cad-progress" class="alert alert-info py-2 d-flex align-items-center gap-2" role="status">
-                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-                <span id="cad-progress-text">Model generation in progress. This page updates automatically.</span>
-            </div>
+            <partial name="_ShaftComparison" model="Model.ShaftComparison" />
         }
         else
         {
-            <p class="text-muted">No 3D model generated yet. Click "Generate 3D Model" above.</p>
+            <div class="alert alert-secondary py-2" role="status">
+                <i class="bi bi-info-circle-fill"></i>
+                No AI (PINN) prediction yet. Click "Generate Shaft Prediction (PINN)" to add the AI comparison. The design checks below use the manual formulas@(string.IsNullOrWhiteSpace(r.FeaCheckJson) ? "" : " and FEA").
+            </div>
+
+            if (Model.ShaftComparison is not null)
+            {
+                <h3 class="h6 mt-3">Design checks (@Model.ShaftComparison.StandardShaftSizeMm.ToString("F0") mm shaft)</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-2">
+                        <thead>
+                            <tr>
+                                <th>Check</th>
+                                <th class="text-end">Value</th>
+                                <th class="text-end">Limit</th>
+                                <th style="min-width:140px;">Utilisation</th>
+                                <th class="text-end">Margin</th>
+                                <th>Result</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in Model.ShaftComparison.Checks)
+                            {
+                                double pct = double.IsInfinity(c.Utilization) ? 100.0 : Math.Min(c.Utilization * 100.0, 100.0);
+                                string barClass = !c.Passed ? "bg-danger" : c.Utilization > 0.85 ? "bg-warning" : "bg-success";
+                                <tr>
+                                    <th>@c.Name <span class="text-muted small">(@c.Unit)</span> <span class="badge bg-light text-dark border">@c.Source</span></th>
+                                    <td class="text-end">@FmtNum(c.DemandValue)<div class="text-muted small">@c.DemandLabel</div></td>
+                                    <td class="text-end">@FmtNum(c.CapacityValue)<div class="text-muted small">@c.CapacityLabel</div></td>
+                                    <td>
+                                        <div class="progress" style="height:10px;" role="progressbar"
+                                             aria-label="@c.Name utilisation"
+                                             aria-valuenow="@pct.ToString("F0")" aria-valuemin="0" aria-valuemax="100">
+                                            <div class="progress-bar @barClass" style="width:@pct.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                                        </div>
+                                        <span class="small text-muted">@(double.IsInfinity(c.Utilization) ? "n/a" : (c.Utilization * 100.0).ToString("F1") + " %")</span>
+                                    </td>
+                                    <td class="text-end">@(double.IsInfinity(c.Utilization) ? "n/a" : FmtPct(c.MarginPercent))</td>
+                                    <td>
+                                        @if (c.Passed)
+                                        {
+                                            <span class="badge bg-success">Pass</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">Fail</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-muted small mb-0">Shafts come in fixed sizes, so the exact calculated size is moved up to the next available size.</p>
+            }
         }
     </div>
 }
 
 @section Scripts {
-    @if (r?.CadStatus == CadJobStatus.Queued || r?.CadStatus == CadJobStatus.Running)
+    @if (r is not null && (r.CadStatus == CadJobStatus.Queued || r.CadStatus == CadJobStatus.Running))
     {
         <script>
             (function () {
@@ -265,26 +340,43 @@ else
                 var badge = document.getElementById('cad-badge');
                 var text = document.getElementById('cad-progress-text');
                 var failures = 0;
+                var timer = null;
+
+                function schedule(ms) {
+                    if (timer) clearTimeout(timer);
+                    timer = setTimeout(poll, ms);
+                }
+
+                function reloadToModelSection() {
+                    // Keep the reader on the 3D model section after the reload.
+                    window.location.hash = 'model-section';
+                    window.location.reload();
+                }
 
                 function poll() {
-                    fetch(statusUrl, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+                    if (document.hidden) {
+                        // Do not poll in a background tab; resume on visibilitychange.
+                        return;
+                    }
+                    fetch(statusUrl, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin', cache: 'no-store' })
                         .then(function (res) {
                             if (!res.ok) throw new Error('HTTP ' + res.status);
                             return res.json();
                         })
                         .then(function (data) {
                             failures = 0;
-                            if (data.status === 'Completed' || data.status === 'Failed') {
-                                window.location.reload();
+                            if (data.status !== 'Queued' && data.status !== 'Running') {
+                                // Completed, Failed, or reset: show the final page state.
+                                reloadToModelSection();
                                 return;
                             }
                             if (badge) badge.textContent = data.status;
                             if (text) {
                                 text.textContent = data.status === 'Running'
-                                    ? 'Generating 3D model in FreeCAD...'
+                                    ? 'Generating 3D model and running FEA check in FreeCAD...'
                                     : 'Waiting in queue...';
                             }
-                            setTimeout(poll, 3000);
+                            schedule(3000);
                         })
                         .catch(function () {
                             failures++;
@@ -292,15 +384,19 @@ else
                                 if (text) text.textContent = 'Unable to check status. Please reload the page.';
                                 return;
                             }
-                            setTimeout(poll, 5000);
+                            schedule(5000);
                         });
                 }
 
-                setTimeout(poll, 2000);
+                document.addEventListener('visibilitychange', function () {
+                    if (!document.hidden) schedule(500);
+                });
+
+                schedule(2000);
             })();
         </script>
     }
-    @if (r?.CadStatus == CadJobStatus.Completed && r.CadStepFilePath != null)
+    @if (r is not null && r.CadStatus == CadJobStatus.Completed && r.CadStepFilePath != null)
     {
         <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
         <script src="~/js/step-viewer.js"></script>
