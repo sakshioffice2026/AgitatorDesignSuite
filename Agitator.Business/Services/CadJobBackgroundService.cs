@@ -169,7 +169,7 @@ namespace Agitator.Business.Services
                 impellerDiameterMm = impeller.DiameterM * 1000,
                 numberOfImpellers = impeller.NumberOfImpellers,
                 clearanceToDiameterRatio = impeller.ClearanceToDiameterRatio,
-                shaftDiameterMm = job.RecommendedShaftDiameterMm,
+                shaftDiameterMm = job.CadShaftDiameterMm ?? job.RecommendedShaftDiameterMm,
                 material = impeller.ShaftMaterial?.Grade ?? "SS316L",
                 heatTreatment = impeller.ShaftMaterial?.HeatTreatment ?? string.Empty,
                 operatingTemperatureC = job.Project!.FluidProperties?.OperatingTemperatureC,

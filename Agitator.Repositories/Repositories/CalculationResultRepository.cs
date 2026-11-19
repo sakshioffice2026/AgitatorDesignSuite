@@ -80,6 +80,19 @@ namespace Agitator.Repositories.Repositories
             return (true, null);
         }
 
+        public async Task<(bool success, string? error)> SetCadSourceAsync(int projectId, CadSource? source, double? shaftDiameterMm)
+        {
+            var result = await _db.CalculationResults
+                .FirstOrDefaultAsync(r => r.ProjectId == projectId);
+
+            if (result is null)
+                return (false, $"No calculation result found for project {projectId}.");
+
+            result.CadSource = source;
+            result.CadShaftDiameterMm = shaftDiameterMm;
+            await _db.SaveChangesAsync();
+            return (true, null);
+        }
         public async Task<(bool success, string? error)> SetReportPathAsync(int projectId, string reportPdfPath)
         {
             var result = await _db.CalculationResults

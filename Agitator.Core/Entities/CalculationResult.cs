@@ -18,6 +18,13 @@ namespace Agitator.Core.Entities
         Failed
     }
 
+    public enum CadSource
+    {
+        Manual,
+        Fea,
+        Pinn
+    }
+
     /// <summary>
     /// Persisted output of the calculation engine for a project, plus the
     /// status of any downstream CAD generation job.
@@ -40,6 +47,9 @@ namespace Agitator.Core.Entities
 
         public double RecommendedShaftDiameterMm { get; set; }
         public double RecommendedMotorPowerKw { get; set; }
+
+        public CadSource? CadSource { get; set; }
+        public double? CadShaftDiameterMm { get; set; }
 
         public DateTime CalculatedAtUtc { get; set; } = DateTime.UtcNow;
 

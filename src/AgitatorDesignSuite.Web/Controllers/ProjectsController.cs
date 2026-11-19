@@ -337,13 +337,15 @@ namespace AgitatorDesignSuite.Web.Controllers
         // POST: /Projects/RequestCadModel/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> RequestCadModel(int id)
+        public async Task<IActionResult> RequestCadModel(int id, CadSource? source = null)
         {
             try
             {
-                var (success, error) = await _cadJobService.EnqueueAsync(id);
+                var (success, error) = await _cadJobService.EnqueueAsync(id, source);
                 TempData[success ? "Success" : "Error"] = success
-                    ? "3D model generation has been queued. Status will update automatically."
+                                   ? (source.HasValue
+                        ? $"STEP generation has been queued using {source.Value.ToString().ToUpperInvariant()} values. Status will update automatically."
+                        : "3D model generation has been queued. Status will update automatically.")
                     : error;
                 return RedirectToAction(nameof(Results), new { id });
             }
@@ -410,7 +412,8 @@ namespace AgitatorDesignSuite.Web.Controllers
                 }
 
                 var bytes = await System.IO.File.ReadAllBytesAsync(project.CalculationResult.CadStepFilePath);
-                return File(bytes, "application/step", $"{project.Name}-model.step");
+                var sourceTag = project.CalculationResult.CadSource?.ToString().ToUpperInvariant() ?? "MODEL";
+                return File(bytes, "application/step", $"{project.Name}-{sourceTag}-model.step");
             }
             catch (Exception ex)
             {

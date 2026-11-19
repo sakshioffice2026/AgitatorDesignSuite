@@ -110,6 +110,11 @@ namespace Agitator.Business.Services
                             AddRow(table, "Torque", $"{result.TorqueNm:F2} N.m");
                             AddRow(table, "Impeller tip speed", $"{result.TipSpeedMPerS:F2} m/s");
                             AddRow(table, "Recommended shaft diameter", $"{result.RecommendedShaftDiameterMm:F1} mm");
+                            if (result.CadSource.HasValue && result.CadShaftDiameterMm.HasValue)
+                            {
+                                AddRow(table, "STEP model source", result.CadSource.Value.ToString().ToUpperInvariant());
+                                AddRow(table, "STEP model shaft diameter", $"{result.CadShaftDiameterMm.Value:F1} mm");
+                            }
                             if (impeller.ShaftMaterial is not null)
                             {
                                 AddRow(table, "Shaft yield strength at temperature",

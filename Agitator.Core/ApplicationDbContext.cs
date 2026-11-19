@@ -72,6 +72,11 @@ namespace Agitator.Core
                 .HasConversion<string>()
                 .HasMaxLength(20);
 
+            modelBuilder.Entity<CalculationResult>()
+                .Property(r => r.CadSource)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+
             modelBuilder.Entity<ExceptionHandler>(entity =>
             {
                 entity.ToTable("exceptionhandler");

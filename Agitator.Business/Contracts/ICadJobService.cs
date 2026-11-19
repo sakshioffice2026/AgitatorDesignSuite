@@ -1,4 +1,7 @@
-﻿namespace Agitator.Business.Contracts
+﻿using Agitator.Core.Entities;
+
+
+namespace Agitator.Business.Contracts
 {
     public interface ICadJobService
     {
@@ -7,6 +10,6 @@
         /// happens out-of-process in CadJobBackgroundService so slow FreeCAD
         /// runs never block a web request.
         /// </summary>
-        Task<(bool success, string? error)> EnqueueAsync(int projectId, CancellationToken ct = default);
+        Task<(bool success, string? error)> EnqueueAsync(int projectId, CadSource? source, CancellationToken ct = default);
     }
 }

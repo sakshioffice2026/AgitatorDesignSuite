@@ -158,6 +158,32 @@
     .rs-foot { font-size:.76rem; color:var(--mute); margin:10px 0 0; }
     .rs-foot-box { display:inline-block; width:10px; height:10px; border-radius:2px; background:#c7d2fe; margin-right:5px; vertical-align:-1px; }
     .rs-notes { margin:10px 0 0; padding:10px 14px 10px 30px; background:#f8fafc; border:1px solid var(--rule); border-radius:6px; font-size:.8rem; color:#334155; }
+
+    /* ---- Next step: choose STEP source ---- */
+    .cad-next { background:linear-gradient(135deg,#eef2ff 0%,#f5f3ff 100%); border:2px solid #4f46e5; border-radius:10px; padding:18px 20px; animation:cadGlow 2.2s ease-in-out infinite; }
+    @@keyframes cadGlow { 0%,100% { box-shadow:0 0 0 0 rgba(79,70,229,.45); } 50% { box-shadow:0 0 0 8px rgba(79,70,229,0); } }
+    .cad-next-head { display:flex; align-items:center; gap:14px; margin-bottom:14px; }
+    .cad-next-ico { width:44px; height:44px; border-radius:50%; background:#4f46e5; color:#fff; display:flex; align-items:center; justify-content:center; font-size:1.25rem; flex:0 0 auto; animation:cadPulse 1.6s ease-in-out infinite; }
+    @@keyframes cadPulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.12); } }
+    .cad-next-badge { display:inline-block; background:#4f46e5; color:#fff; font-size:.68rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; padding:2px 8px; border-radius:999px; margin-bottom:2px; }
+    .cad-next-title { font-size:1.1rem; font-weight:700; color:#1e1b4b; }
+    .cad-next-text { font-size:.88rem; color:#475569; }
+    .cad-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:14px; }
+    .cad-tile { position:relative; display:block; margin:0; cursor:pointer; }
+    .cad-tile input { position:absolute; opacity:0; inset:0; width:100%; height:100%; cursor:pointer; }
+    .cad-tile-body { display:block; height:100%; background:#fff; border:2px solid #cbd5e1; border-radius:8px; padding:12px 14px; transition:border-color .15s, box-shadow .15s, background .15s; }
+    .cad-tile:hover .cad-tile-body { border-color:#818cf8; }
+    .cad-tile input:checked + .cad-tile-body { border-color:#4338ca; background:#eef2ff; box-shadow:0 0 0 3px rgba(67,56,202,.2); }
+    .cad-tile input:focus-visible + .cad-tile-body { outline:2px solid #4338ca; outline-offset:2px; }
+    .cad-tile.is-disabled { cursor:not-allowed; opacity:.55; }
+    .cad-tile.is-disabled input { cursor:not-allowed; }
+    .cad-tile-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .cad-tile-name { font-weight:700; color:#0f172a; }
+    .cad-tile-dia { display:block; font-size:1.4rem; font-weight:700; color:#312e81; margin:4px 0 2px; }
+    .cad-tile-note { display:block; font-size:.78rem; color:#64748b; }
+    .cad-next-foot { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+    .cad-ready { background:#ecfdf5; border:1px solid #6ee7b7; border-radius:10px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+    .cad-ready-text { font-weight:600; color:#065f46; }
 </style>
 
 <div class="rs container-fluid px-0">
@@ -182,6 +208,37 @@ else
     bool showVerify = cmp is not null || hasPrediction;
     bool showTable = cmp is not null && cmp.Quantities.Count > 0;
     string colChecks = showTable ? "col-12 col-xl-5" : "col-12";
+
+    double[] cadStdSizesMm =
+    {
+        20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100,
+        110, 120, 130, 140, 150, 160, 180, 200, 220, 240, 260, 280, 300
+    };
+
+    double? CadRoundStd(double? rawMm)
+    {
+        if (!rawMm.HasValue || rawMm.Value <= 0) return null;
+        foreach (double size in cadStdSizesMm)
+        {
+            if (rawMm.Value <= size) return size;
+        }
+        return Math.Ceiling(rawMm.Value / 10.0) * 10.0;
+    }
+
+    var cadDiaQty = cmp?.Quantities.FirstOrDefault(q => q.Name == "Shaft diameter (before rounding)");
+    double? cadManualMm = r.RecommendedShaftDiameterMm;
+    double? cadFeaMm = CadRoundStd(cadDiaQty?.Fea);
+    double? cadPinnMm = CadRoundStd(cadDiaQty?.Pinn);
+    bool cadPinnOutOfLimit = cmp is not null && cmp.Quantities.Any(q => q.PinnAgrees == false);
+    string cadDefault = cadFeaMm.HasValue ? "Fea" : cadPinnMm.HasValue ? "Pinn" : "Manual";
+    string cadSourceText = r.CadSource.HasValue ? r.CadSource.Value.ToString().ToUpperInvariant() : string.Empty;
+
+    var cadOptions = new[]
+    {
+        new { Key = "Fea", Label = "FEA", Mm = cadFeaMm, Note = "Reference. Most accurate.", Missing = "FEA result is not available." },
+        new { Key = "Pinn", Label = "PINN (AI)", Mm = cadPinnMm, Note = "AI estimate. Fast, checked against FEA.", Missing = "PINN prediction has not been generated." },
+        new { Key = "Manual", Label = "Manual formula", Mm = cadManualMm, Note = "Design formula (Km 1.5). Cross-check.", Missing = "" }
+    };
 
     string? feaStatus = null;
     string? feaError = null;
@@ -322,16 +379,23 @@ else
             <div>
                 <h1>@Model.Name</h1>
                 <div class="rs-pills">
-                    <span class="rs-pill @cadPill"><span class="dot"></span>CAD: @r.CadStatus</span>
+                    <span class="rs-pill @cadPill"><span class="dot"></span>CAD: @r.CadStatus@(r.CadSource.HasValue ? " · " + cadSourceText : "")</span>
+                    @if (cadDone)
+                    {
+                        <span class="rs-pill @(r.CadSource.HasValue ? "green" : "amber")"><span class="dot"></span>STEP: @(r.CadSource.HasValue ? cadSourceText : "Not generated yet")</span>
+                    }
                     <span class="rs-pill @feaPill"><span class="dot"></span>FEA: @feaLabel</span>
                     <span class="rs-pill @pinnPill"><span class="dot"></span>PINN: @pinnLabel</span>
                 </div>
             </div>
             <div class="rs-actions">
-                <form asp-action="RequestCadModel" asp-route-id="@Model.Id" method="post">
-                    @Html.AntiForgeryToken()
-                    <button type="submit" class="btn btn-primary btn-sm" disabled="@cadBusy"><i class="bi bi-box"></i> Generate 3D Model (FreeCAD)</button>
-                </form>
+                @if (!cadDone)
+                {
+                    <form asp-action="RequestCadModel" asp-route-id="@Model.Id" method="post">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-primary btn-sm" disabled="@cadBusy"><i class="bi bi-box"></i> Generate 3D Model (FreeCAD)</button>
+                    </form>
+                }
                 <form asp-action="GeneratePrediction" asp-route-id="@Model.Id" method="post">
                     @Html.AntiForgeryToken()
                     <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-cpu"></i> @(hasPrediction ? "Regenerate Shaft Prediction (PINN)" : "Generate Shaft Prediction (PINN)")</button>
@@ -374,6 +438,69 @@ else
             </div>
         </div>
     </div>
+
+    @* ===================== NEXT STEP: CHOOSE STEP SOURCE ===================== *@
+    @if (cadDone)
+    {
+        @if (r.CadSource.HasValue)
+        {
+            <div class="cad-ready mb-3">
+                <div class="cad-ready-text"><i class="bi bi-check-circle-fill"></i> STEP ready &middot; @cadSourceText@(r.CadShaftDiameterMm.HasValue ? " · Ø " + r.CadShaftDiameterMm.Value.ToString("F0", inv) + " mm" : "")</div>
+                <div class="d-flex gap-2">
+                    <a class="btn btn-success btn-sm" href="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"><i class="bi bi-download"></i> Download STEP</a>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#cadChooser" aria-expanded="false" aria-controls="cadChooser"><i class="bi bi-arrow-repeat"></i> Change source</button>
+                </div>
+            </div>
+        }
+
+        <div id="cadChooser" class="@(r.CadSource.HasValue ? "collapse" : "") mb-3">
+            <div class="cad-next">
+                <form asp-action="RequestCadModel" asp-route-id="@Model.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="cad-next-head">
+                        <span class="cad-next-ico"><i class="bi bi-box-seam"></i></span>
+                        <div>
+                            <span class="cad-next-badge">Next step</span>
+                            <div class="cad-next-title">Choose the source for your STEP file</div>
+                            <div class="cad-next-text">3D model and FEA check are ready. Select which calculation the shaft diameter in the STEP file is built from.</div>
+                        </div>
+                    </div>
+                    <div class="cad-tiles">
+                        @foreach (var o in cadOptions)
+                        {
+                            bool avail = o.Mm.HasValue;
+                            bool isDefault = avail && o.Key == cadDefault;
+                            <label class="cad-tile @(avail ? "" : "is-disabled")">
+                                <input type="radio" name="source" value="@o.Key" disabled="@(!avail)" />
+                                <span class="cad-tile-body">
+                                    <span class="cad-tile-top">
+                                        <span class="cad-tile-name">@o.Label</span>
+                                        @if (isDefault)
+                                        {
+                                            <span class="badge bg-success">Recommended</span>
+                                        }
+                                    </span>
+                                    @if (avail)
+                                    {
+                                        <span class="cad-tile-dia">Ø @o.Mm!.Value.ToString("F0", inv) mm</span>
+                                    }
+                                    <span class="cad-tile-note">@(avail ? o.Note : o.Missing)</span>
+                                </span>
+                            </label>
+                        }
+                    </div>
+                    @if (cadPinnOutOfLimit)
+                    {
+                        <div class="alert alert-warning small py-2">PINN differs from the reference by more than its allowed gap. Prefer FEA or Manual.</div>
+                    }
+                    <div class="cad-next-foot">
+                        <span class="small text-muted">Diameters are rounded up to the next standard shaft size.</span>
+                        <button type="submit" id="cadGenerateStep" class="btn btn-primary btn-lg" disabled><i class="bi bi-box"></i> Generate STEP file</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    }
 
     @* ===================== ROW 1: FOUR REFERENCE CARDS ===================== *@
     <div class="row g-3 mb-3">
@@ -630,10 +757,11 @@ else
                         <span id="cad-badge" class="badge @badgeClass">@r.CadStatus</span>
                     </div>
                     <div class="d-flex gap-2">
-                        @if (cadDone)
+                        @if (cadDone && r.CadSource.HasValue)
                         {
-                            <a class="btn btn-outline-secondary btn-sm" href="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"><i class="bi bi-download"></i> STEP file</a>
+                            <a class="btn btn-outline-secondary btn-sm" href="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"><i class="bi bi-download"></i> STEP file (@cadSourceText@(r.CadShaftDiameterMm.HasValue ? " · Ø " + r.CadShaftDiameterMm.Value.ToString("F0", inv) + " mm" : ""))</a>
                         }
+
                         @if (r.CadStatus == CadJobStatus.Failed)
                         {
                             <form asp-action="ChangeStatus" asp-route-id="@Model.Id" method="post">
@@ -647,6 +775,10 @@ else
                     @if (!cadDone)
                     {
                         <p class="rs-cap">Generating the 3D model also runs the shaft FEA check. Both finish before the status shows Completed.</p>
+                    }
+                    else if (!r.CadSource.HasValue)
+                    {
+                        <p class="rs-cap">3D model and FEA check are ready. Choose FEA, PINN or Manual to generate the STEP file.</p>
                     }
 
                     <div class="row g-3">
@@ -747,6 +879,20 @@ else
 </div>
 
 @section Scripts {
+    <script>
+        (function () {
+            var btn = document.getElementById('cadGenerateStep');
+            if (!btn) return;
+            var radios = document.querySelectorAll('#cadChooser input[name="source"]');
+            radios.forEach(function (rb) {
+                rb.addEventListener('change', function () { btn.disabled = false; });
+            });
+            var chooser = document.getElementById('cadChooser');
+            if (chooser && chooser.classList.contains('collapse') === false) {
+                setTimeout(function () { chooser.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300);
+            }
+        })();
+    </script>
     @if (r is not null && (r.CadStatus == CadJobStatus.Queued || r.CadStatus == CadJobStatus.Running))
     {
         <script>
