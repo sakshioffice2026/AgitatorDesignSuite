@@ -184,6 +184,83 @@
     .cad-next-foot { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
     .cad-ready { background:#ecfdf5; border:1px solid #6ee7b7; border-radius:10px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
     .cad-ready-text { font-weight:600; color:#065f46; }
+
+    /* ---- Pointer banner ---- */
+    .cad-banner { display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:linear-gradient(135deg,#eef2ff 0%,#f5f3ff 100%); border:2px solid #4f46e5; border-radius:10px; padding:12px 18px; animation:cadGlow 2.2s ease-in-out infinite; }
+    .cad-banner-text { flex:1 1 260px; min-width:0; }
+    .cad-banner .cad-next-ico { width:38px; height:38px; font-size:1.1rem; }
+
+    /* ---- STEP source selector ---- */
+    .cs-sub { margin:2px 0 0; font-size:.78rem; color:var(--mute); }
+    .cs-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+    .cs-card { position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:4px; width:100%; text-align:left; background:#fff; border:1px solid var(--rule); border-radius:8px; padding:12px 14px; font:inherit; color:#0f172a; transition:border-color .15s, background .15s, box-shadow .15s; }
+    button.cs-card { cursor:pointer; }
+    button.cs-card:hover { border-color:#818cf8; }
+    button.cs-card:focus-visible { outline:2px solid #4338ca; outline-offset:2px; }
+    .cs-top { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; }
+    .cs-name { font-size:.74rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#334155; }
+    .cs-tag { font-size:.7rem; font-weight:600; color:var(--mute); }
+    .cs-dia { font-family:'Space Grotesk',sans-serif; font-size:1.45rem; font-weight:700; color:#0f172a; font-variant-numeric:tabular-nums; line-height:1.2; }
+    .cs-dia small { font-size:.8rem; font-weight:500; color:var(--mute); margin-left:4px; }
+    .cs-dia.muted { font-size:.95rem; font-weight:600; color:#94a3b8; }
+    .cs-pill { display:inline-flex; align-items:center; gap:5px; margin-top:2px; border-radius:999px; padding:2px 10px; font-size:.7rem; font-weight:700; border:1px solid transparent; }
+    .cs-pill.select { background:#f1f5f9; color:#475569; border-color:var(--rule); }
+    button.cs-card:hover .cs-pill.select { background:#eef2ff; color:var(--info); border-color:#c7d2fe; }
+    .cs-pill.active { background:#dcfce7; color:#166534; border-color:#bbf7d0; }
+    .cs-card.is-active { border:2px solid #16a34a; background:#f0fdf4; padding:11px 13px; }
+    .cs-card.is-off { background:#f8fafc; border-style:dashed; cursor:not-allowed; }
+    .cs-card.is-off .cs-name, .cs-card.is-off .cs-tag { color:#94a3b8; }
+    .cs-card.is-selected:not(.is-active) { border-color:#4338ca; box-shadow:0 0 0 3px rgba(67,56,202,.18); background:#eef2ff; }
+    .cs-card.is-selected:not(.is-active) .cs-pill.select { background:#4338ca; color:#fff; border-color:#4338ca; }
+
+    /* ---- Horizontal metric strips ---- */
+    .cm-head, .cm-strip { display:grid; grid-template-columns:minmax(170px,1.2fr) minmax(0,2fr) minmax(280px,1.7fr); gap:14px; align-items:center; }
+    .cm-head { padding:0 14px 6px; font-size:.64rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--mute); }
+    .cm-head .cm-slots span { text-align:right; }
+    .cm-head-right { text-align:right; }
+    .cm-strip { background:#fff; border:1px solid var(--rule); border-radius:8px; padding:10px 14px; margin-bottom:8px; }
+    .cm-name { font-weight:600; font-size:.88rem; color:#0f172a; min-width:0; }
+    .cm-slots { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+    .cm-slot { display:block; text-align:right; padding:5px 10px; border-radius:6px; font-family:'Space Grotesk',sans-serif; font-size:.95rem; font-weight:600; color:#0f172a; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .cm-slot.is-ref { background:#eef2ff; color:#312e81; font-weight:700; }
+    .cm-slot.is-off { color:#94a3b8; font-weight:500; }
+    .cm-slot.is-selected { box-shadow:inset 0 -2px 0 #4338ca; }
+    .cm-right { display:flex; align-items:center; justify-content:flex-end; gap:12px; min-width:0; }
+    .cm-gap-val { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:.95rem; color:#0f172a; font-variant-numeric:tabular-nums; white-space:nowrap; min-width:70px; text-align:right; }
+    .cm-meter { flex:1 1 90px; min-width:90px; }
+    .cm-bar { height:6px; border-radius:3px; background:#e2e8f0; overflow:hidden; }
+    .cm-bar-fill { display:block; height:100%; border-radius:3px; }
+    .cm-bar-fill.ok { background:#16a34a; }
+    .cm-bar-fill.warn { background:#f59e0b; }
+    .cm-bar-fill.bad { background:#dc2626; }
+    .cm-limit { display:block; margin-top:3px; font-size:.68rem; color:var(--mute); white-space:nowrap; }
+    .cm-note { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 12px; margin-top:4px; padding:9px 14px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px; font-size:.8rem; color:var(--mute); }
+    .cm-note-label { font-weight:700; font-size:.7rem; letter-spacing:.06em; text-transform:uppercase; color:#475569; }
+    .cm-note-list { display:flex; flex-wrap:wrap; gap:4px 18px; list-style:none; margin:0; padding:0; }
+    .cm-note-list b { color:#0f172a; font-variant-numeric:tabular-nums; margin-left:4px; }
+    @@media (max-width: 991.98px) {
+        .cs-strip { grid-template-columns:1fr; }
+        .cm-head { display:none; }
+        .cm-strip { grid-template-columns:1fr; gap:8px; }
+        .cm-slot::before { content:attr(data-label); float:left; font-family:inherit; font-size:.62rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--mute); }
+        .cm-right { justify-content:flex-start; flex-wrap:wrap; }
+    }
+    #pinn-section.cad-flash .rs-card { box-shadow:0 0 0 3px rgba(79,70,229,.5); }
+    .rs.has-bar { padding-bottom:96px; }
+
+    /* ---- Confirm bar ---- */
+    .cad-bar { position:fixed; left:0; right:0; bottom:0; z-index:1030; background:#1e1b4b; color:#fff; padding:12px 20px; box-shadow:0 -4px 16px rgba(15,23,42,.25); transform:translateY(110%); visibility:hidden; transition:transform .25s ease, visibility 0s linear .25s; }
+    .cad-bar.show { transform:translateY(0); visibility:visible; transition:transform .25s ease; }
+    .cad-bar-inner { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; max-width:1400px; margin:0 auto; }
+    .cad-bar-text { font-weight:600; }
+    .cad-bar-text small { color:#c7d2fe; font-weight:500; margin-left:6px; }
+
+    /* ---- Confirm panel ---- */
+    .cad-conf-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin-bottom:12px; }
+    @@media (prefers-reduced-motion: reduce) {
+        .cad-next, .cad-banner, .cad-next-ico { animation:none; }
+        .cad-bar { transition:none; }
+    }
 </style>
 
 <div class="rs container-fluid px-0">
@@ -207,7 +284,9 @@ else
     var cmp = Model.ShaftComparison;
     bool showVerify = cmp is not null || hasPrediction;
     bool showTable = cmp is not null && cmp.Quantities.Count > 0;
-    string colChecks = showTable ? "col-12 col-xl-5" : "col-12";
+    bool selectable = cadDone && showTable;
+    string colTable = selectable ? "col-12" : "col-12 col-xl-7";
+    string colChecks = showTable ? (selectable ? "col-12" : "col-12 col-xl-5") : "col-12";
 
     double[] cadStdSizesMm =
     {
@@ -239,6 +318,60 @@ else
         new { Key = "Pinn", Label = "PINN (AI)", Mm = cadPinnMm, Note = "AI estimate. Fast, checked against FEA.", Missing = "PINN prediction has not been generated." },
         new { Key = "Manual", Label = "Manual formula", Mm = cadManualMm, Note = "Design formula (Km 1.5). Cross-check.", Missing = "" }
     };
+
+    string stepKey = r.CadSource.HasValue ? r.CadSource.Value.ToString() : string.Empty;
+
+    bool ColAvail(string key) => cadOptions.First(o => o.Key == key).Mm.HasValue;
+
+    string ColCls(string key)
+    {
+        var cls = new List<string>();
+        if (!ColAvail(key)) cls.Add("is-off");
+        if (key == stepKey) cls.Add("is-step");
+        return string.Join(" ", cls);
+    }
+
+    string ColTag(string key) => key switch
+    {
+        "Fea" => "Reference · Recommended",
+        "Pinn" => "AI estimate" + (cadDefault == "Pinn" ? " · Recommended" : ""),
+        _ => "Formula" + (cadDefault == "Manual" ? " · Recommended" : "")
+    };
+
+    string ColReason(string key) => key switch
+    {
+        "Fea" => "FEA not run",
+        "Pinn" => cmp?.PinnSkipped == true ? "PINN skipped" : "PINN not run",
+        _ => ""
+    };
+
+    string cadPayloadJson = "{}";
+    if (cmp is not null)
+    {
+        var cadPayload = new
+        {
+            shaftChecked = cmp.StandardShaftSizeMm,
+            sources = cadOptions.ToDictionary(o => o.Key, o => new { label = o.Label, mm = o.Mm, avail = o.Mm.HasValue }),
+            rows = cmp.Quantities.Select(q => new
+            {
+                name = q.Name,
+                unit = q.Unit,
+                values = new
+                {
+                    Manual = Cell(q.Manual),
+                    Fea = Cell(q.Fea),
+                    Pinn = cmp.PinnSkipped ? "Skipped" : Cell(q.Pinn)
+                },
+                gaps = new
+                {
+                    Manual = !q.Manual.HasValue ? "n/a" : q.Fea.HasValue ? Gap(ShaftComparisonMath.PercentDifference(q.Manual, q.Fea)) + " vs FEA" : "Reference",
+                    Fea = q.Fea.HasValue ? "Reference" : "n/a",
+                    Pinn = cmp.PinnSkipped ? "—" : Gap(q.Fea.HasValue ? q.PinnVsFeaPercent : q.PinnVsManualPercent) + " vs " + q.ReferenceName
+                }
+            }).ToList()
+        };
+        cadPayloadJson = System.Text.Json.JsonSerializer.Serialize(cadPayload);
+    }
 
     string? feaStatus = null;
     string? feaError = null;
@@ -448,11 +581,33 @@ else
                 <div class="cad-ready-text"><i class="bi bi-check-circle-fill"></i> STEP ready &middot; @cadSourceText@(r.CadShaftDiameterMm.HasValue ? " · Ø " + r.CadShaftDiameterMm.Value.ToString("F0", inv) + " mm" : "")</div>
                 <div class="d-flex gap-2">
                     <a class="btn btn-success btn-sm" href="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"><i class="bi bi-download"></i> Download STEP</a>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#cadChooser" aria-expanded="false" aria-controls="cadChooser"><i class="bi bi-arrow-repeat"></i> Change source</button>
+                    @if (showTable)
+                    {
+                        <button type="button" id="cadChangeSource" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-repeat"></i> Change source</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#cadChooser" aria-expanded="false" aria-controls="cadChooser"><i class="bi bi-arrow-repeat"></i> Change source</button>
+                    }
                 </div>
             </div>
         }
 
+        @if (showTable && !r.CadSource.HasValue)
+        {
+            <div class="cad-banner mb-3" role="status">
+                <span class="cad-next-ico"><i class="bi bi-hand-index-thumb"></i></span>
+                <div class="cad-banner-text">
+                    <span class="cad-next-badge">Next step</span>
+                    <div class="cad-next-title">Pick FEA, PINN or Manual in the comparison table below</div>
+                    <div class="cad-next-text">3D model and FEA check are ready. Choose the source the STEP shaft diameter is built from.</div>
+                </div>
+                <button type="button" id="cadGoTable" class="btn btn-primary btn-sm"><i class="bi bi-arrow-down-circle"></i> Go to table</button>
+            </div>
+        }
+
+        @if (!showTable)
+        {
         <div id="cadChooser" class="@(r.CadSource.HasValue ? "collapse" : "") mb-3">
             <div class="cad-next">
                 <form asp-action="RequestCadModel" asp-route-id="@Model.Id" method="post">
@@ -500,6 +655,7 @@ else
                 </form>
             </div>
         </div>
+        }
     }
 
     @* ===================== ROW 1: FOUR REFERENCE CARDS ===================== *@
@@ -590,10 +746,13 @@ else
         @* ---------- Section A: MANUAL vs FEA vs PINN (AI) ---------- *@
         @if (showTable)
         {
-        <div id="pinn-section" class="col-12 col-xl-7 d-flex">
+        <div id="pinn-section" class="@colTable d-flex">
             <section class="rs-card">
                 <header class="rs-card-head">
-                    <h2 class="rs-card-title">AI (PINN) comparison · Manual vs FEA vs PINN</h2>
+                    <div>
+                        <h2 class="rs-card-title">AI (PINN) comparison · Manual vs FEA vs PINN</h2>
+                        <p class="cs-sub">Choose which solver drives the STEP file, then inspect metric agreement.</p>
+                    </div>
                     @if (cmp!.PinnSkipped)
                     {
                         <span class="rs-chip mute">PINN skipped</span>
@@ -607,53 +766,112 @@ else
                         <span class="rs-chip mute">PINN not generated</span>
                     }
                 </header>
-                <div class="rs-card-body">
-                    <div class="rs-table-wrap">
-                        <table class="rs-table">
-                            <thead>
-                                <tr>
-                                    <th>Quantity</th>
-                                    <th class="num">Manual</th>
-                                    <th class="num">FEA</th>
-                                    <th class="num">PINN (AI)</th>
-                                    <th class="num">PINN gap</th>
-                                    <th>Result</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var q in cmp.Quantities)
-                                {
-                                    bool hasFea = q.Fea.HasValue;
-                                    double? gapValue = hasFea ? q.PinnVsFeaPercent : q.PinnVsManualPercent;
-                                    <tr>
-                                        <th scope="row">@q.Name <span class="rs-unit">(@q.Unit)</span></th>
-                                        <td class="num @(!hasFea ? "is-ref" : "")">@Cell(q.Manual)</td>
-                                        <td class="num @(hasFea ? "is-ref" : "")">@Cell(q.Fea)</td>
-                                        <td class="num">@(cmp.PinnSkipped ? "Skipped" : Cell(q.Pinn))</td>
-                                        <td class="num">@(cmp.PinnSkipped ? "—" : Gap(gapValue))<span class="rs-sub">vs @q.ReferenceName · limit @(q.TolerancePercent.ToString("0.##")) %</span></td>
-                                        <td>
-                                            @if (cmp.PinnSkipped)
-                                            {
-                                                <span class="rs-chip mute">Skipped</span>
-                                            }
-                                            else if (q.PinnAgrees is null)
-                                            {
-                                                <span class="rs-chip mute">n/a</span>
-                                            }
-                                            else if (q.PinnAgrees == true)
-                                            {
-                                                <span class="rs-chip ok"><i class="bi bi-check-lg"></i> Agrees</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="rs-chip warn"><i class="bi bi-exclamation-triangle-fill"></i> Deviates</span>
-                                            }
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
+                <div class="rs-card-body" id="cadSourceTable">
+                    @{
+                        var compQs = cmp.Quantities.Where(qq => qq.Fea.HasValue || qq.Pinn.HasValue).ToList();
+                        var formulaQs = cmp.Quantities.Where(qq => !qq.Fea.HasValue && !qq.Pinn.HasValue).ToList();
+                    }
+
+                    @* ---------- STEP source selector ---------- *@
+                    <div class="cs-strip" role="group" aria-label="STEP source">
+                        @foreach (var col in new[] { new { Key = "Manual", Name = "Manual" }, new { Key = "Fea", Name = "FEA" }, new { Key = "Pinn", Name = "PINN (AI)" } })
+                        {
+                            bool colAvail = ColAvail(col.Key);
+                            bool isActive = col.Key == stepKey;
+                            string cardCls = "cs-card" + (isActive ? " is-active" : "") + (!colAvail ? " is-off" : "");
+                            if (selectable && colAvail)
+                            {
+                                <button type="button" class="@cardCls" data-col="@col.Key" data-select-col="@col.Key" aria-pressed="false">
+                                    <span class="cs-top"><span class="cs-name">@col.Name</span><span class="cs-tag">@ColTag(col.Key)</span></span>
+                                    @if (isActive)
+                                    {
+                                        <span class="cs-pill active"><i class="bi bi-check-lg"></i> Active STEP source</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="cs-pill select">Select</span>
+                                    }
+                                </button>
+                            }
+                            else
+                            {
+                                <div class="@cardCls" data-col="@col.Key">
+                                    <span class="cs-top"><span class="cs-name">@col.Name</span><span class="cs-tag">@(colAvail ? ColTag(col.Key) : ColReason(col.Key))</span></span>
+                                    @if (colAvail && isActive)
+                                    {
+                                        <span class="cs-pill active"><i class="bi bi-check-lg"></i> Active STEP source</span>
+                                    }
+                                </div>
+                            }
+                        }
                     </div>
+
+                    @* ---------- Horizontal metric strips ---------- *@
+                    <div class="cm-head" aria-hidden="true">
+                        <span></span>
+                        <div class="cm-slots"><span>Manual</span><span>FEA</span><span>PINN</span></div>
+                        <span class="cm-head-right">PINN gap · tolerance · result</span>
+                    </div>
+
+                    @if (compQs.Count == 0)
+                    {
+                        <div class="cm-note"><span class="cm-note-text">No quantity has an FEA or PINN value to compare yet.</span></div>
+                    }
+
+                    @foreach (var q in compQs)
+                    {
+                        bool hasFea = q.Fea.HasValue;
+                        double? gapValue = hasFea ? q.PinnVsFeaPercent : q.PinnVsManualPercent;
+                        double tol = q.TolerancePercent;
+                        double ratio = (!cmp.PinnSkipped && gapValue.HasValue && tol > 0) ? Math.Abs(gapValue.Value) / tol : 0;
+                        string barCls = ratio > 1 ? "bad" : ratio > 0.75 ? "warn" : "ok";
+                        int barW = (int)Math.Round(Math.Min(ratio, 1.0) * 100.0);
+                        <div class="cm-strip">
+                            <div class="cm-name">@q.Name <span class="rs-unit">(@q.Unit)</span></div>
+                            <div class="cm-slots">
+                                <span class="cm-slot @(!hasFea ? "is-ref" : "") @ColCls("Manual")" data-col="Manual" data-label="Manual">@Cell(q.Manual)</span>
+                                <span class="cm-slot @(hasFea ? "is-ref" : "") @ColCls("Fea")" data-col="Fea" data-label="FEA">@Cell(q.Fea)</span>
+                                <span class="cm-slot @ColCls("Pinn")" data-col="Pinn" data-label="PINN">@(cmp.PinnSkipped ? "Skipped" : Cell(q.Pinn))</span>
+                            </div>
+                            <div class="cm-right">
+                                <span class="cm-gap-val">@(cmp.PinnSkipped ? "—" : Gap(gapValue))</span>
+                                <div class="cm-meter">
+                                    <div class="cm-bar" role="progressbar" aria-label="@q.Name PINN gap against tolerance" aria-valuenow="@barW" aria-valuemin="0" aria-valuemax="100"><i class="cm-bar-fill @barCls" style="width:@(barW)%"></i></div>
+                                    <span class="cm-limit">vs @q.ReferenceName · max @(tol.ToString("0.##")) %</span>
+                                </div>
+                                @if (cmp.PinnSkipped)
+                                {
+                                    <span class="rs-chip mute">Skipped</span>
+                                }
+                                else if (q.PinnAgrees is null)
+                                {
+                                    <span class="rs-chip mute">n/a</span>
+                                }
+                                else if (q.PinnAgrees == true)
+                                {
+                                    <span class="rs-chip ok"><i class="bi bi-check-lg"></i> Agrees</span>
+                                }
+                                else
+                                {
+                                    <span class="rs-chip bad"><i class="bi bi-x-lg"></i> Exceeds</span>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    @if (formulaQs.Count > 0)
+                    {
+                        <div class="cm-note">
+                            <span class="cm-note-label"><i class="bi bi-calculator"></i> Formula only</span>
+                            <span class="cm-note-text">No FEA or PINN value for these.</span>
+                            <ul class="cm-note-list">
+                                @foreach (var fq in formulaQs)
+                                {
+                                    <li><span>@fq.Name (@fq.Unit)</span> <b>@Cell(fq.Manual)</b></li>
+                                }
+                            </ul>
+                        </div>
+                    }
 
                     <p class="rs-foot"><span class="rs-foot-box"></span>Shaded value is the reference the PINN is compared with: FEA when it was run, otherwise the manual formula.@(cmp.FeaAvailable ? "" : " FEA has not been run for this project.")</p>
                     @if (!string.IsNullOrWhiteSpace(cmp.ModelVersion))
@@ -778,7 +996,7 @@ else
                     }
                     else if (!r.CadSource.HasValue)
                     {
-                        <p class="rs-cap">3D model and FEA check are ready. Choose FEA, PINN or Manual to generate the STEP file.</p>
+                        <p class="rs-cap">3D model and FEA check are ready. Pick FEA, PINN or Manual in the comparison table to generate the STEP file.</p>
                     }
 
                     <div class="row g-3">
@@ -874,12 +1092,193 @@ else
         </div>
     </div>
     }
+
+    @* ===================== CONFIRM BAR + CONFIRM PANEL (STEP SOURCE) ===================== *@
+    @if (selectable)
+    {
+        <script type="application/json" id="cadSourceData">@Html.Raw(cadPayloadJson)</script>
+
+        <div id="cadBar" class="cad-bar" role="region" aria-label="STEP source selection">
+            <div class="cad-bar-inner">
+                <div class="cad-bar-text">Selected: <span id="cadBarName"></span> · Generate STEP file <small id="cadBarDia"></small></div>
+                <div class="d-flex gap-2">
+                    <button type="button" id="cadBarClear" class="btn btn-outline-light btn-sm">Clear</button>
+                    <button type="button" id="cadBarReview" class="btn btn-light btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#cadConfirmModal">Review &amp; confirm</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="cadConfirmModal" tabindex="-1" aria-labelledby="cadConfirmTitle" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+                <form asp-action="RequestCadModel" asp-route-id="@Model.Id" method="post" id="cadConfirmForm" class="modal-content">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="source" id="cadSourceInput" value="" />
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="cadConfirmTitle">Confirm STEP source: <span id="cadConfirmName"></span></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="cad-conf-tiles">
+                            <div class="rs-tile"><div class="k">STEP shaft diameter</div><div class="v" id="cadConfirmDia">—</div></div>
+                            <div class="rs-tile"><div class="k">Standard shaft size checked</div><div class="v">@shaftSize<small>mm</small></div></div>
+                            <div class="rs-tile">
+                                <div class="k">Design checks</div>
+                                <div class="v">
+                                    @if (totalChecks > 0)
+                                    {
+                                        <span class="rs-chip @(passedChecks == totalChecks ? "ok" : "bad")">@passedChecks / @totalChecks passed</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="rs-chip mute">n/a</span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="rs-tile"><div class="k">Design status</div><div class="v" style="font-size:.9rem;">@vTitle</div></div>
+                        </div>
+
+                        <div id="cadWarnPinn" class="alert alert-warning small py-2" role="alert" data-active="@(cadPinnOutOfLimit ? "true" : "false")" hidden>
+                            <i class="bi bi-exclamation-triangle-fill"></i> PINN is outside its allowed gap for at least one quantity. Prefer FEA or Manual.
+                        </div>
+                        <div id="cadWarnDia" class="alert alert-info small py-2" role="status" hidden></div>
+
+                        <div class="rs-table-wrap">
+                            <table class="rs-table sm">
+                                <thead>
+                                    <tr>
+                                        <th>Quantity</th>
+                                        <th class="num">Value</th>
+                                        <th class="num">Gap vs FEA</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cadConfirmRows"></tbody>
+                            </table>
+                        </div>
+                        <p class="rs-foot">Diameters are rounded up to the next standard shaft size for the STEP file.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" id="cadConfirmSubmit" class="btn btn-primary"><i class="bi bi-box"></i> Confirm &amp; Generate STEP</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    }
 }
 
 </div>
 
 @section Scripts {
     <script>
+        (function () {
+            var dataEl = document.getElementById('cadSourceData');
+            var table = document.getElementById('cadSourceTable');
+            var section = document.getElementById('pinn-section');
+
+            function goTable() {
+                if (!section) return;
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                section.classList.add('cad-flash');
+                setTimeout(function () { section.classList.remove('cad-flash'); }, 2400);
+            }
+
+            var goBtn = document.getElementById('cadGoTable');
+            if (goBtn) goBtn.addEventListener('click', goTable);
+            var changeBtn = document.getElementById('cadChangeSource');
+            if (changeBtn) changeBtn.addEventListener('click', goTable);
+
+            if (!dataEl || !table) return;
+
+            var data = JSON.parse(dataEl.textContent);
+            var root = document.querySelector('.rs');
+            var bar = document.getElementById('cadBar');
+            var barName = document.getElementById('cadBarName');
+            var barDia = document.getElementById('cadBarDia');
+            var modal = document.getElementById('cadConfirmModal');
+            var selected = null;
+
+            function diaText(mm) {
+                return (mm === null || mm === undefined) ? '—' : '\u00D8 ' + Number(mm).toFixed(0) + ' mm';
+            }
+
+            function paint() {
+                table.querySelectorAll('[data-col]').forEach(function (el) {
+                    el.classList.toggle('is-selected', el.getAttribute('data-col') === selected);
+                });
+                table.querySelectorAll('[data-select-col]').forEach(function (b) {
+                    b.setAttribute('aria-pressed', b.getAttribute('data-select-col') === selected ? 'true' : 'false');
+                });
+                if (selected) {
+                    var s = data.sources[selected];
+                    barName.textContent = s.label.replace(' formula', '');
+                    barDia.textContent = '(' + diaText(s.mm) + ')';
+                    bar.classList.add('show');
+                    if (root) root.classList.add('has-bar');
+                } else {
+                    bar.classList.remove('show');
+                    if (root) root.classList.remove('has-bar');
+                }
+            }
+
+            table.querySelectorAll('[data-select-col]').forEach(function (b) {
+                b.addEventListener('click', function () {
+                    var key = b.getAttribute('data-select-col');
+                    selected = (selected === key) ? null : key;
+                    paint();
+                });
+            });
+
+            var clearBtn = document.getElementById('cadBarClear');
+            if (clearBtn) clearBtn.addEventListener('click', function () { selected = null; paint(); });
+
+            function cell(tag, text, cls) {
+                var el = document.createElement(tag);
+                el.textContent = text;
+                if (cls) el.className = cls;
+                return el;
+            }
+
+            if (modal) {
+                modal.addEventListener('show.bs.modal', function () {
+                    if (!selected) return;
+                    var s = data.sources[selected];
+                    document.getElementById('cadSourceInput').value = selected;
+                    document.getElementById('cadConfirmName').textContent = s.label;
+                    document.getElementById('cadConfirmDia').textContent = diaText(s.mm);
+
+                    var warnPinn = document.getElementById('cadWarnPinn');
+                    warnPinn.hidden = !(selected === 'Pinn' && warnPinn.getAttribute('data-active') === 'true');
+
+                    var warnDia = document.getElementById('cadWarnDia');
+                    if (s.mm !== null && s.mm !== undefined && Number(s.mm) !== Number(data.shaftChecked)) {
+                        warnDia.textContent = 'Design checks were run for ' + Number(data.shaftChecked).toFixed(0) +
+                            ' mm. The STEP file will be built at ' + Number(s.mm).toFixed(0) + ' mm.';
+                        warnDia.hidden = false;
+                    } else {
+                        warnDia.hidden = true;
+                    }
+
+                    var body = document.getElementById('cadConfirmRows');
+                    body.textContent = '';
+                    data.rows.forEach(function (row) {
+                        var tr = document.createElement('tr');
+                        tr.appendChild(cell('th', row.name + (row.unit ? ' (' + row.unit + ')' : '')));
+                        tr.appendChild(cell('td', row.values[selected], 'num'));
+                        tr.appendChild(cell('td', row.gaps[selected], 'num'));
+                        body.appendChild(tr);
+                    });
+                });
+            }
+
+            var form = document.getElementById('cadConfirmForm');
+            if (form) {
+                form.addEventListener('submit', function () {
+                    var submit = document.getElementById('cadConfirmSubmit');
+                    if (submit) submit.disabled = true;
+                });
+            }
+        })();
+
         (function () {
             var btn = document.getElementById('cadGenerateStep');
             if (!btn) return;
