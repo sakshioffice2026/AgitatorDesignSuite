@@ -1,3 +1,4 @@
+@using System.Globalization
 @using Agitator.Core.Entities
 @using Agitator.Models.ViewModel
 @using Agitator.Models.DTOs
@@ -6,6 +7,7 @@
 @{
     ViewData["Title"] = "Results";
     var r = Model.CalculationResult;
+    var inv = CultureInfo.InvariantCulture;
 
     string FmtNum(double? value)
     {
@@ -15,51 +17,150 @@
         return value.Value.ToString(format);
     }
 
-    string FmtPct(double value) => value.ToString("+0.00;-0.00;0.00") + " %";
+    string Cell(double? value)
+    {
+        var s = FmtNum(value);
+        return s == "n/a" ? "—" : s;
+    }
+
+    string Gap(double? value) => value.HasValue ? value.Value.ToString("+0.00;-0.00;0.00") + " %" : "—";
+    string FmtPct(double value) => value.ToString("+0.0;-0.0;0.0") + " %";
+    string UCls(double u) => (double.IsInfinity(u) || double.IsNaN(u) || u > 0.90) ? "u-red" : u > 0.75 ? "u-amber" : "u-green";
+    string UPct(double u) => (double.IsInfinity(u) || double.IsNaN(u) ? 100.0 : Math.Min(Math.Max(u * 100.0, 0.0), 100.0)).ToString("F0", inv);
+    string UTxt(double u) => (double.IsInfinity(u) || double.IsNaN(u)) ? "n/a" : (u * 100.0).ToString("F1") + " %";
 }
 
 <style>
-    .cockpit-wrap { width:100%; }
-    .cockpit-header { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:12px 14px; }
-    .cockpit-card { background:#fff; border:1px solid #e2e8f0; border-radius:8px; height:100%; display:flex; flex-direction:column; }
-    .cockpit-card-head { padding:10px 12px; border-bottom:1px solid #f1f5f9; background:#f8fafc; border-radius:8px 8px 0 0; }
-    .cockpit-card-body { padding:12px; flex:1 1 auto; }
-    .cockpit-title { font-size:0.95rem; font-weight:600; margin:0; color:#0f172a; }
-    .cockpit-note { font-size:0.78rem; color:#64748b; }
-    .status-pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:4px 12px; font-size:0.78rem; font-weight:600; border:1px solid transparent; }
-    .status-pill .dot { width:8px; height:8px; border-radius:50%; background:currentColor; }
-    .pill-green { background:#dcfce7; color:#166534; border-color:#bbf7d0; }
-    .pill-amber { background:#fef3c7; color:#92400e; border-color:#fde68a; }
-    .pill-red { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
-    .pill-grey { background:#f1f5f9; color:#475569; border-color:#e2e8f0; }
-    .metric-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
-    .metric { background:#f8fafc; border:1px solid #f1f5f9; border-radius:6px; padding:8px 12px; }
-    .metric .label { font-size:0.75rem; color:#64748b; }
-    .metric .value { font-size:1.15rem; font-weight:600; color:#0f172a; }
-    .metric .unit { font-size:0.78rem; font-weight:400; color:#64748b; }
-    .util-track { position:relative; height:12px; background:#f1f5f9; border-radius:6px; overflow:hidden; }
-    .util-fill { height:100%; border-radius:6px; }
-    .util-fill.u-green { background:#22c55e; }
-    .util-fill.u-amber { background:#f59e0b; }
-    .util-fill.u-red { background:#ef4444; }
-    .util-tick { position:absolute; top:0; bottom:0; width:2px; background:#fff; opacity:.9; }
-    .util-legend span { display:inline-flex; align-items:center; gap:4px; margin-right:12px; }
-    .util-legend i { width:10px; height:10px; border-radius:2px; display:inline-block; }
-    .metric-grid.compact { grid-template-columns:repeat(3, minmax(0, 1fr)); gap:6px; }
-    .metric-grid.compact .metric { padding:6px 8px; }
-    .metric-grid.compact .label { font-size:0.7rem; }
-    .metric-grid.compact .value { font-size:1rem; }
-    .metric-grid.compact .value.sm { font-size:0.85rem; overflow-wrap:anywhere; }
-    .cockpit-fit { height:calc(100vh - 240px); min-height:480px; display:flex; flex-direction:column; }
-    .cockpit-fit > .cockpit-lower { flex:1 1 0; min-height:0; }
-    .cockpit-lower > [class*="col-"] { min-height:0; }
-    .cockpit-lower .cockpit-card { min-height:0; }
-    .cockpit-lower .cockpit-card-body { overflow-y:auto; min-height:0; }
-    #viewer-container { width:100%; height:300px; background:#f1f5f9; border-radius:6px; }
-    .viewer-empty { height:200px; display:flex; align-items:center; justify-content:center; text-align:center; background:#f1f5f9; border:1px dashed #cbd5e1; border-radius:6px; color:#64748b; padding:16px; }
+    .rs { --ok:#15803d; --ok-bg:#f0fdf4; --warn:#b45309; --warn-bg:#fffbeb; --bad:#b91c1c; --bad-bg:#fef2f2; --info:#3730a3; --info-bg:#eef2ff; --mute:#64748b; --rule:#e2e8f0; width:100%; padding-bottom:16px; }
+    .rs h1, .rs h2, .rs h3 { margin:0; }
+
+    /* ---------- command bar ---------- */
+    .rs-bar { background:#fff; border:1px solid var(--rule); border-radius:8px; box-shadow:0 1px 2px rgba(15,23,42,.05); overflow:hidden; }
+    .rs-bar-top { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; padding:14px 18px; }
+    .rs-bar-top h1 { font-size:1.5rem; font-weight:700; color:#0f172a; }
+    .rs-pills { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+    .rs-pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:3px 11px; font-size:.74rem; font-weight:600; border:1px solid transparent; }
+    .rs-pill .dot { width:7px; height:7px; border-radius:50%; background:currentColor; }
+    .rs-pill.green { background:#dcfce7; color:#166534; border-color:#bbf7d0; }
+    .rs-pill.amber { background:#fef3c7; color:#92400e; border-color:#fde68a; }
+    .rs-pill.red { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
+    .rs-pill.grey { background:#f1f5f9; color:#475569; border-color:#e2e8f0; }
+    .rs-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+
+    /* ---------- verdict strip ---------- */
+    .rs-verdict { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:16px; align-items:center; padding:14px 18px; border-top:1px solid var(--rule); border-left:5px solid var(--vc); background:var(--vbg); }
+    .rs-v-ok { --vc:var(--ok); --vbg:var(--ok-bg); }
+    .rs-v-warn { --vc:var(--warn); --vbg:var(--warn-bg); }
+    .rs-v-bad { --vc:var(--bad); --vbg:var(--bad-bg); }
+    .rs-v-info { --vc:var(--info); --vbg:var(--info-bg); }
+    .rs-verdict-main { display:flex; gap:14px; align-items:center; min-width:0; }
+    .rs-verdict-ico { width:46px; height:46px; border-radius:50%; display:grid; place-items:center; background:var(--vc); color:#fff; font-size:1.35rem; flex:0 0 auto; }
+    .rs-eyebrow { font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:var(--mute); font-weight:700; }
+    .rs-verdict-title { font-family:'Space Grotesk',sans-serif; font-size:1.3rem; font-weight:700; color:var(--vc); line-height:1.2; }
+    .rs-verdict-text { font-size:.84rem; color:#334155; margin-top:2px; }
+    .rs-verdict-stats { display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
+    .rs-stat { background:#fff; border:1px solid var(--rule); border-radius:6px; padding:8px 14px; min-width:128px; }
+    .rs-stat-label { font-size:.64rem; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); font-weight:700; }
+    .rs-stat-value { font-family:'Space Grotesk',sans-serif; font-size:1.5rem; font-weight:700; color:#0f172a; line-height:1.25; font-variant-numeric:tabular-nums; }
+    .rs-stat-value.sm { font-size:1rem; padding-top:5px; }
+    .rs-stat-value small { font-size:.8rem; font-weight:500; color:var(--mute); margin-left:4px; }
+    @@media (max-width: 991.98px) { .rs-verdict { grid-template-columns:1fr; } .rs-verdict-stats { justify-content:flex-start; } }
+
+    /* ---------- cards ---------- */
+    .rs-card { background:#fff; border:1px solid var(--rule); border-radius:8px; box-shadow:0 1px 2px rgba(15,23,42,.05); display:flex; flex-direction:column; width:100%; height:100%; }
+    .rs-card-head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:11px 16px; border-bottom:1px solid var(--rule); min-height:48px; }
+    .rs-card-title { font-size:.74rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:#334155; display:flex; align-items:center; gap:8px; }
+    .rs-card-title::before { content:""; width:3px; height:14px; border-radius:2px; background:var(--structural,#3730A3); }
+    .rs-card-body { padding:14px 16px; flex:1 1 auto; display:flex; flex-direction:column; min-width:0; }
+    .rs-cap { font-size:.78rem; color:var(--mute); margin:0 0 10px; }
+
+    .rs-kv { display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:7px 0; border-bottom:1px solid #f1f5f9; font-size:.86rem; }
+    .rs-kv:last-child { border-bottom:0; }
+    .rs-kv .k { color:var(--mute); }
+    .rs-kv .v { font-weight:600; color:#0f172a; text-align:right; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+    .rs-kv .v small { font-weight:400; color:var(--mute); margin-left:3px; font-size:.75rem; }
+    .rs-kv .v.muted { color:#94a3b8; font-weight:500; }
+
+    .rs-chip { display:inline-flex; align-items:center; gap:5px; border-radius:999px; padding:2px 10px; font-size:.72rem; font-weight:600; border:1px solid transparent; white-space:nowrap; }
+    .rs-chip.ok { background:#dcfce7; color:#166534; border-color:#bbf7d0; }
+    .rs-chip.warn { background:#fef3c7; color:#92400e; border-color:#fde68a; }
+    .rs-chip.bad { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
+    .rs-chip.mute { background:#f1f5f9; color:#475569; border-color:#e2e8f0; }
+    .rs-chip.info { background:#eef2ff; color:#3730a3; border-color:#c7d2fe; }
+
+    /* ---------- 3D viewer + FEA ---------- */
+    #viewer-container { width:100%; height:460px; background:radial-gradient(circle at 50% 40%, #ffffff, #eef2f7); border:1px solid var(--rule); border-radius:6px; }
+    .rs-empty { height:300px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:6px; color:var(--mute); padding:16px; font-size:.88rem; }
+    .rs-empty i { font-size:2rem; color:#94a3b8; }
+    .rs-fea { margin-top:16px; padding-top:14px; border-top:1px solid var(--rule); }
+    .rs-fea.side { margin-top:0; padding-top:0; border-top:0; }
+    .rs-fea-head { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; }
+    .rs-fea-title { font-size:.82rem; font-weight:700; color:#334155; }
+    .rs-fea-main { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:6px; }
+    .rs-fea-big { font-family:'Space Grotesk',sans-serif; font-size:1.5rem; font-weight:700; color:#0f172a; font-variant-numeric:tabular-nums; }
+    .rs-fea-big small { font-size:.8rem; font-weight:500; color:var(--mute); margin-left:4px; }
+    .rs-fea-sub { font-size:.8rem; color:var(--mute); }
+    .rs-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; margin-top:12px; }
+    .rs-tile { background:#f8fafc; border:1px solid #eef2f7; border-radius:6px; padding:8px 12px; }
+    .rs-tile .k { font-size:.7rem; color:var(--mute); }
+    .rs-tile .v { font-weight:700; font-size:1.05rem; color:#0f172a; font-variant-numeric:tabular-nums; }
+    .rs-tile .v small { font-weight:400; font-size:.74rem; color:var(--mute); margin-left:3px; }
+
+    /* ---------- gauges ---------- */
+    .rs-gauge { position:relative; height:10px; border-radius:5px; overflow:hidden; background:linear-gradient(90deg, #dcfce7 0, #dcfce7 75%, #fef3c7 75%, #fef3c7 90%, #fee2e2 90%, #fee2e2 100%); }
+    .rs-gauge-fill { height:100%; border-radius:5px; }
+    .rs-gauge-fill.u-green { background:#16a34a; }
+    .rs-gauge-fill.u-amber { background:#f59e0b; }
+    .rs-gauge-fill.u-red { background:#dc2626; }
+    .rs-gauge-fill.agree { background:#4f46e5; }
+    .rs-tick { position:absolute; top:0; bottom:0; width:2px; background:#fff; opacity:.9; }
+    .rs-legend { display:flex; flex-wrap:wrap; gap:14px; font-size:.74rem; color:var(--mute); margin-top:12px; }
+    .rs-legend span { display:inline-flex; align-items:center; gap:5px; }
+    .rs-legend i { width:10px; height:10px; border-radius:2px; display:inline-block; }
+
+    /* ---------- design checks ---------- */
+    .rs-checks { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:16px 22px; }
+    .rs-check-top { display:flex; align-items:center; gap:10px; margin-bottom:7px; }
+    .rs-check-ico { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font-size:.8rem; color:#fff; flex:0 0 auto; }
+    .rs-check-ico.ok { background:#16a34a; }
+    .rs-check-ico.bad { background:#dc2626; }
+    .rs-check-name { flex:1 1 auto; font-weight:600; font-size:.88rem; color:#0f172a; min-width:0; }
+    .rs-unit { font-weight:400; color:var(--mute); font-size:.78rem; }
+    .rs-src { font-weight:600; font-size:.66rem; letter-spacing:.04em; text-transform:uppercase; color:#475569; background:#f1f5f9; border:1px solid var(--rule); border-radius:4px; padding:1px 6px; margin-left:4px; }
+    .rs-gov { font-weight:600; font-size:.66rem; letter-spacing:.04em; text-transform:uppercase; color:#3730a3; background:#eef2ff; border:1px solid #c7d2fe; border-radius:4px; padding:1px 6px; margin-left:4px; }
+    .rs-check-pct { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.05rem; font-variant-numeric:tabular-nums; }
+    .rs-check-pct.u-green { color:#15803d; }
+    .rs-check-pct.u-amber { color:#b45309; }
+    .rs-check-pct.u-red { color:#b91c1c; }
+    .rs-check-meta { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:.76rem; color:var(--mute); margin-top:6px; }
+    .rs-check-meta b { color:#0f172a; font-weight:600; font-variant-numeric:tabular-nums; }
+    .rs-pinn { margin-bottom:18px; padding-bottom:16px; border-bottom:1px solid var(--rule); }
+    .rs-pinn-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; }
+    .rs-table.sm th, .rs-table.sm td { padding:7px 10px; font-size:.82rem; }
+    .rs-table.sm thead th { font-size:.62rem; }
+    .rs-ai { margin-top:auto; padding-top:16px; }
+    .rs-ai-box { background:#f8fafc; border:1px solid var(--rule); border-radius:6px; padding:12px 14px; }
+    .rs-ai-top { display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:8px; }
+    .rs-ai-big { font-family:'Space Grotesk',sans-serif; font-size:1.2rem; font-weight:700; color:#0f172a; }
+    .rs-ai-big small { font-size:.8rem; font-weight:500; color:var(--mute); margin-left:4px; }
+
+    /* ---------- comparison table ---------- */
+    .rs-table-wrap { overflow-x:auto; }
+    .rs-table { width:100%; border-collapse:separate; border-spacing:0; font-size:.88rem; }
+    .rs-table th, .rs-table td { padding:10px 14px; border-bottom:1px solid #eef2f7; vertical-align:middle; }
+    .rs-table thead th { font-size:.66rem; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); font-weight:700; background:#f8fafc; border-bottom:1px solid var(--rule); white-space:nowrap; text-align:left; }
+    .rs-table thead th.num { text-align:right; }
+    .rs-table tbody tr:last-child th, .rs-table tbody tr:last-child td { border-bottom:0; }
+    .rs-table tbody th { font-weight:600; color:#0f172a; text-align:left; }
+    .rs-table .num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .rs-table td.is-ref { background:#eef2ff; font-weight:700; color:#312e81; }
+    .rs-sub { display:block; font-size:.7rem; color:var(--mute); font-weight:400; }
+    .rs-foot { font-size:.76rem; color:var(--mute); margin:10px 0 0; }
+    .rs-foot-box { display:inline-block; width:10px; height:10px; border-radius:2px; background:#c7d2fe; margin-right:5px; vertical-align:-1px; }
+    .rs-notes { margin:10px 0 0; padding:10px 14px 10px 30px; background:#f8fafc; border:1px solid var(--rule); border-radius:6px; font-size:.8rem; color:#334155; }
 </style>
 
-<div class="cockpit-wrap cockpit-fit container-fluid px-0">
+<div class="rs container-fluid px-0">
 
 @if (r is null)
 {
@@ -74,9 +175,13 @@ else
     var allowableMpa = AgitatorCalculationService.ComputeAllowableShearStressPa(shaftMat, opTemp) / 1_000_000.0;
     bool hasPrediction = !string.IsNullOrWhiteSpace(r.PredictionJson);
     bool cadBusy = r.CadStatus == CadJobStatus.Queued || r.CadStatus == CadJobStatus.Running;
+    bool cadDone = r.CadStatus == CadJobStatus.Completed && r.CadStepFilePath != null;
     bool showCad = cadBusy || r.CadStatus == CadJobStatus.Completed || r.CadStatus == CadJobStatus.Failed;
-    bool showPinn = hasPrediction;
-    string row2Col = (showCad && showPinn) ? "col-lg-6" : "col-12";
+
+    var cmp = Model.ShaftComparison;
+    bool showVerify = cmp is not null || hasPrediction;
+    bool showTable = cmp is not null && cmp.Quantities.Count > 0;
+    string colChecks = showTable ? "col-12 col-xl-5" : "col-12";
 
     string? feaStatus = null;
     string? feaError = null;
@@ -143,36 +248,86 @@ else
 
     var cadPill = r.CadStatus switch
     {
-        CadJobStatus.Completed => "pill-green",
-        CadJobStatus.Failed => "pill-red",
-        CadJobStatus.Running => "pill-amber",
-        CadJobStatus.Queued => "pill-amber",
-        _ => "pill-grey"
+        CadJobStatus.Completed => "green",
+        CadJobStatus.Failed => "red",
+        CadJobStatus.Running => "amber",
+        CadJobStatus.Queued => "amber",
+        _ => "grey"
     };
 
     string feaPill;
     string feaLabel;
-    if (string.IsNullOrWhiteSpace(r.FeaCheckJson)) { feaPill = "pill-grey"; feaLabel = "Not run"; }
-    else if (feaStatus == "ok" && feaPassed) { feaPill = "pill-green"; feaLabel = "Passed"; }
-    else if (feaStatus == "ok") { feaPill = "pill-red"; feaLabel = "Failed"; }
-    else { feaPill = "pill-amber"; feaLabel = "Warning"; }
+    if (string.IsNullOrWhiteSpace(r.FeaCheckJson)) { feaPill = "grey"; feaLabel = "Not run"; }
+    else if (feaStatus == "ok" && feaPassed) { feaPill = "green"; feaLabel = "Passed"; }
+    else if (feaStatus == "ok") { feaPill = "red"; feaLabel = "Failed"; }
+    else { feaPill = "amber"; feaLabel = "Warning"; }
 
-    string pinnPill = hasPrediction ? "pill-green" : "pill-grey";
+    string pinnPill = hasPrediction ? "green" : "grey";
     string pinnLabel = hasPrediction ? "Completed" : "Not run";
 
-    @* ===================== EXECUTIVE HEADER BAR ===================== *@
-    <div class="cockpit-header mb-2">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+    bool feaFailed = feaStatus == "ok" && !feaPassed;
+    var gov = cmp?.GoverningCheck;
+    int totalChecks = cmp?.Checks.Count ?? 0;
+    int passedChecks = cmp?.Checks.Count(chk => chk.Passed) ?? 0;
+    int judged = cmp?.Quantities.Count(qty => qty.PinnAgrees.HasValue) ?? 0;
+    int agreed = cmp?.Quantities.Count(qty => qty.PinnAgrees == true) ?? 0;
+    string shaftSize = (cmp?.StandardShaftSizeMm ?? r.RecommendedShaftDiameterMm).ToString("F0");
+    var pinnDia = (cmp is not null && !cmp.PinnSkipped)
+        ? cmp.Quantities.FirstOrDefault(qty => qty.Pinn.HasValue && qty.Name.Contains("diameter", StringComparison.OrdinalIgnoreCase))
+        : null;
+
+    string vClass;
+    string vIcon;
+    string vTitle;
+    string vText;
+    if (cmp is not null && !cmp.AllChecksPassed)
+    {
+        vClass = "rs-v-bad"; vIcon = "bi-x-octagon-fill"; vTitle = "Review required";
+        vText = $"At least one design check exceeds its limit for the {cmp.StandardShaftSizeMm:F0} mm shaft. Ask an engineer to review before use.";
+    }
+    else if (feaFailed)
+    {
+        vClass = "rs-v-bad"; vIcon = "bi-x-octagon-fill"; vTitle = "Review required";
+        vText = "The FEA stress is above the allowable limit. Ask an engineer to review before use.";
+    }
+    else if (cmp is null)
+    {
+        vClass = "rs-v-info"; vIcon = "bi-hourglass-split"; vTitle = "Verification pending";
+        vText = "Generate the shaft prediction (PINN) to run the full design verification.";
+    }
+    else if (cmp.PinnSkipped)
+    {
+        vClass = "rs-v-ok"; vIcon = "bi-check-lg"; vTitle = "Design checks passed";
+        vText = "All checks pass. The AI (PINN) cross-check was skipped because the inputs are outside its trained range.";
+    }
+    else if (string.IsNullOrWhiteSpace(cmp.ModelVersion))
+    {
+        vClass = "rs-v-ok"; vIcon = "bi-check-lg"; vTitle = "Design checks passed";
+        vText = "All checks pass. No AI (PINN) cross-check has been generated yet.";
+    }
+    else if (cmp.OverallPassed)
+    {
+        vClass = "rs-v-ok"; vIcon = "bi-patch-check-fill"; vTitle = "Design verified";
+        vText = "All checks pass and the AI (PINN) result agrees with the reference.";
+    }
+    else
+    {
+        vClass = "rs-v-warn"; vIcon = "bi-exclamation-triangle-fill"; vTitle = "Passed with AI deviation";
+        vText = "All checks pass, but the AI (PINN) result is outside the allowed gap. Use the manual result and ask an engineer to review.";
+    }
+
+    @* ===================== COMMAND BAR: TITLE, STATUS, ACTIONS, VERDICT ===================== *@
+    <div class="rs-bar mb-3">
+        <div class="rs-bar-top">
             <div>
-                <div class="d-flex align-items-center flex-wrap gap-2">
-                    <h1 class="mb-0" style="font-size:1.4rem;">@Model.Name</h1>
-                    <span class="status-pill @cadPill"><span class="dot"></span>CAD: @r.CadStatus</span>
-                    <span class="status-pill @feaPill"><span class="dot"></span>FEA: @feaLabel</span>
-                    <span class="status-pill @pinnPill"><span class="dot"></span>PINN: @pinnLabel</span>
+                <h1>@Model.Name</h1>
+                <div class="rs-pills">
+                    <span class="rs-pill @cadPill"><span class="dot"></span>CAD: @r.CadStatus</span>
+                    <span class="rs-pill @feaPill"><span class="dot"></span>FEA: @feaLabel</span>
+                    <span class="rs-pill @pinnPill"><span class="dot"></span>PINN: @pinnLabel</span>
                 </div>
-                <div class="cockpit-note">Calculated results and mechanical recommendations</div>
             </div>
-            <div class="d-flex align-items-center flex-wrap gap-2">
+            <div class="rs-actions">
                 <form asp-action="RequestCadModel" asp-route-id="@Model.Id" method="post">
                     @Html.AntiForgeryToken()
                     <button type="submit" class="btn btn-primary btn-sm" disabled="@cadBusy"><i class="bi bi-box"></i> Generate 3D Model (FreeCAD)</button>
@@ -184,280 +339,408 @@ else
                 <a class="btn btn-outline-secondary btn-sm" href="/Projects/DownloadReport/@Model.Id"><i class="bi bi-file-earmark-pdf"></i> Download PDF Datasheet</a>
             </div>
         </div>
-    </div>
-
-    @* ===================== ROW 1: FOUR COMPACT CARDS ===================== *@
-    <div class="row g-2 mb-2">
-        <div class="col-xl-3 col-md-6 d-flex">
-            <div class="cockpit-card d-flex flex-column h-100 w-100">
-                <div class="cockpit-card-head d-flex justify-content-between align-items-center">
-                    <h2 class="cockpit-title">Process dynamics</h2>
-                    <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle">@r.Regime</span>
-                </div>
-                <div class="cockpit-card-body">
-                    <div class="metric-grid compact">
-                        <div class="metric"><div class="label">Reynolds number</div><div class="value">@r.ReynoldsNumber.ToString("F0")</div></div>
-                        <div class="metric"><div class="label">Power number (Np)</div><div class="value">@r.PowerNumber.ToString("F3")</div></div>
-                        <div class="metric"><div class="label">Power draw</div><div class="value">@r.PowerDrawWatts.ToString("F0") <span class="unit">W</span></div></div>
-                        <div class="metric"><div class="label">Torque</div><div class="value">@r.TorqueNm.ToString("F2") <span class="unit">N·m</span></div></div>
-                        <div class="metric"><div class="label">Tip speed</div><div class="value">@r.TipSpeedMPerS.ToString("F2") <span class="unit">m/s</span></div></div>
-                    </div>
+        <div class="rs-verdict @vClass">
+            <div class="rs-verdict-main">
+                <span class="rs-verdict-ico"><i class="bi @vIcon"></i></span>
+                <div>
+                    <div class="rs-eyebrow">Design status</div>
+                    <div class="rs-verdict-title">@vTitle</div>
+                    <div class="rs-verdict-text">@vText</div>
                 </div>
             </div>
-        </div>
-
-        <div class="col-xl-3 col-md-6 d-flex">
-            <div class="cockpit-card d-flex flex-column h-100 w-100">
-                <div class="cockpit-card-head">
-                    <h2 class="cockpit-title">Mechanical recommendations</h2>
+            <div class="rs-verdict-stats">
+                <div class="rs-stat">
+                    <div class="rs-stat-label">Shaft size to use</div>
+                    <div class="rs-stat-value">@shaftSize<small>mm</small></div>
                 </div>
-                <div class="cockpit-card-body">
-                    <div class="metric-grid compact">
-                        <div class="metric"><div class="label">Shaft diameter</div><div class="value">@r.RecommendedShaftDiameterMm.ToString("F1") <span class="unit">mm</span></div></div>
-                        <div class="metric"><div class="label">Motor rating</div><div class="value">@r.RecommendedMotorPowerKw.ToString("F2") <span class="unit">kW</span></div></div>
-                        @if (r.CriticalSpeedRpm.HasValue)
-                        {
-                            <div class="metric"><div class="label">Critical speed</div><div class="value">@r.CriticalSpeedRpm.Value.ToString("F0") <span class="unit">rpm</span></div></div>
-                        }
-                        @if (r.GoodmanFactor.HasValue)
-                        {
-                            <div class="metric"><div class="label">Goodman factor</div><div class="value">@r.GoodmanFactor.Value.ToString("F2")</div></div>
-                        }
-                        @if (r.TipDeflectionMm.HasValue)
-                        {
-                            <div class="metric"><div class="label">Tip deflection</div><div class="value">@r.TipDeflectionMm.Value.ToString("F3") <span class="unit">mm</span></div></div>
-                        }
-                        @if (r.TwistDeg.HasValue)
-                        {
-                            <div class="metric"><div class="label">Angle of twist</div><div class="value">@r.TwistDeg.Value.ToString("F3") <span class="unit">°</span></div></div>
-                        }
+                <div class="rs-stat">
+                    <div class="rs-stat-label">Motor rating</div>
+                    <div class="rs-stat-value">@r.RecommendedMotorPowerKw.ToString("F2")<small>kW</small></div>
+                </div>
+                @if (pinnDia is not null)
+                {
+                    <div class="rs-stat">
+                        <div class="rs-stat-label">AI (PINN) diameter</div>
+                        <div class="rs-stat-value">@Cell(pinnDia.Pinn)<small>mm</small></div>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-xl-3 col-md-6 d-flex">
-            <div class="cockpit-card d-flex flex-column h-100 w-100">
-                <div class="cockpit-card-head">
-                    <h2 class="cockpit-title">Shaft material and operating basis</h2>
-                </div>
-                <div class="cockpit-card-body">
-                    <div class="metric-grid compact">
-                        <div class="metric"><div class="label">Shaft material</div><div class="value sm">@(shaftMat?.Grade ?? "Not specified")</div></div>
-                        <div class="metric"><div class="label">Heat treatment</div><div class="value sm">@(shaftMat?.HeatTreatment ?? "Not specified")</div></div>
-                        <div class="metric"><div class="label">Operating temp.</div><div class="value">@opTemp.ToString("F1") <span class="unit">°C</span></div></div>
-                        @if (shaftMat is not null)
-                        {
-                            <div class="metric"><div class="label">Yield at temp.</div><div class="value">@AgitatorCalculationService.ComputeYieldAtTemperatureMpa(shaftMat, opTemp).ToString("F1") <span class="unit">MPa</span></div></div>
-                        }
-                        <div class="metric"><div class="label">Allowable shear</div><div class="value">@allowableMpa.ToString("F1") <span class="unit">MPa</span></div></div>
+                }
+                @if (gov is not null)
+                {
+                    <div class="rs-stat">
+                        <div class="rs-stat-label">Governing check</div>
+                        <div class="rs-stat-value sm">@gov.Name <small>@UTxt(gov.Utilization)</small></div>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-xl-3 col-md-6 d-flex">
-            <div class="cockpit-card d-flex flex-column h-100 w-100">
-                <div class="cockpit-card-head">
-                    <h2 class="cockpit-title">Project summary and quick reference</h2>
-                </div>
-                <div class="cockpit-card-body">
-                    <div class="metric-grid compact">
-                        <div class="metric"><div class="label">Vessel diameter</div><div class="value">@Model.Vessel?.DiameterM.ToString("F2") <span class="unit">m</span></div></div>
-                        <div class="metric"><div class="label">Liquid height</div><div class="value">@Model.Vessel?.LiquidHeightM.ToString("F2") <span class="unit">m</span></div></div>
-                        <div class="metric"><div class="label">Baffles</div><div class="value">@(Model.Vessel?.HasBaffles == true ? Model.Vessel.NumberOfBaffles.ToString() : "None")</div></div>
-                        <div class="metric"><div class="label">Impeller type</div><div class="value sm">@Model.Impeller?.Type</div></div>
-                        <div class="metric"><div class="label">Impeller dia.</div><div class="value">@Model.Impeller?.DiameterM.ToString("F3") <span class="unit">m</span></div></div>
-                        <div class="metric"><div class="label">Speed</div><div class="value">@Model.Impeller?.RotationalSpeedRpm.ToString("F0") <span class="unit">RPM</span></div></div>
-                    </div>
-                </div>
+                }
             </div>
         </div>
     </div>
 
-    @* ===================== ROW 2: INTELLIGENCE & VALIDATION ===================== *@
-    @if (showCad || showPinn)
-    {
-    <div class="row g-3 cockpit-lower">
-        @* ---------- Column B: PINN + EMPIRICAL COMPARISON ---------- *@
-        @if (showPinn)
-        {
-        <div id="pinn-section" class="@row2Col d-flex">
-            <div class="cockpit-card d-flex flex-column h-100 w-100">
-                <div class="cockpit-card-head">
-                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <h2 class="cockpit-title">Design checks and AI (PINN) comparison</h2>
-                    </div>
+    @* ===================== ROW 1: FOUR REFERENCE CARDS ===================== *@
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-md-6 col-xl-3 d-flex">
+            <section class="rs-card">
+                <header class="rs-card-head">
+                    <h2 class="rs-card-title">Process dynamics</h2>
+                    <span class="rs-chip info">@r.Regime</span>
+                </header>
+                <div class="rs-card-body">
+                    <div class="rs-kv"><span class="k">Reynolds number</span><span class="v">@r.ReynoldsNumber.ToString("N0", inv)</span></div>
+                    <div class="rs-kv"><span class="k">Power number (Np)</span><span class="v">@r.PowerNumber.ToString("F3")</span></div>
+                    <div class="rs-kv"><span class="k">Power draw</span><span class="v">@r.PowerDrawWatts.ToString("F0")<small>W</small></span></div>
+                    <div class="rs-kv"><span class="k">Torque</span><span class="v">@r.TorqueNm.ToString("F2")<small>N·m</small></span></div>
+                    <div class="rs-kv"><span class="k">Tip speed</span><span class="v">@r.TipSpeedMPerS.ToString("F2")<small>m/s</small></span></div>
                 </div>
-                <div class="cockpit-card-body">
-                    @if (hasPrediction)
+            </section>
+        </div>
+
+        <div class="col-12 col-md-6 col-xl-3 d-flex">
+            <section class="rs-card">
+                <header class="rs-card-head">
+                    <h2 class="rs-card-title">Mechanical recommendations</h2>
+                </header>
+                <div class="rs-card-body">
+                    <div class="rs-kv"><span class="k">Shaft diameter</span><span class="v">@r.RecommendedShaftDiameterMm.ToString("F1")<small>mm</small></span></div>
+                    <div class="rs-kv"><span class="k">Motor rating</span><span class="v">@r.RecommendedMotorPowerKw.ToString("F2")<small>kW</small></span></div>
+                    @if (r.CriticalSpeedRpm.HasValue)
                     {
-                        <partial name="_ShaftComparison" model="Model.ShaftComparison" />
+                        <div class="rs-kv"><span class="k">Critical speed</span><span class="v">@r.CriticalSpeedRpm.Value.ToString("F0")<small>rpm</small></span></div>
+                    }
+                    @if (r.GoodmanFactor.HasValue)
+                    {
+                        <div class="rs-kv"><span class="k">Goodman factor</span><span class="v">@r.GoodmanFactor.Value.ToString("F2")</span></div>
+                    }
+                    @if (r.TipDeflectionMm.HasValue)
+                    {
+                        <div class="rs-kv"><span class="k">Tip deflection</span><span class="v">@r.TipDeflectionMm.Value.ToString("F3")<small>mm</small></span></div>
+                    }
+                    @if (r.TwistDeg.HasValue)
+                    {
+                        <div class="rs-kv"><span class="k">Angle of twist</span><span class="v">@r.TwistDeg.Value.ToString("F3")<small>°</small></span></div>
+                    }
+                </div>
+            </section>
+        </div>
+
+        <div class="col-12 col-md-6 col-xl-3 d-flex">
+            <section class="rs-card">
+                <header class="rs-card-head">
+                    <h2 class="rs-card-title">Shaft material &amp; operating basis</h2>
+                </header>
+                <div class="rs-card-body">
+                    <div class="rs-kv"><span class="k">Shaft material</span><span class="v @(shaftMat?.Grade is null ? "muted" : "")">@(shaftMat?.Grade ?? "Not specified")</span></div>
+                    <div class="rs-kv"><span class="k">Heat treatment</span><span class="v @(shaftMat?.HeatTreatment is null ? "muted" : "")">@(shaftMat?.HeatTreatment ?? "Not specified")</span></div>
+                    <div class="rs-kv"><span class="k">Operating temp.</span><span class="v">@opTemp.ToString("F1")<small>°C</small></span></div>
+                    @if (shaftMat is not null)
+                    {
+                        <div class="rs-kv"><span class="k">Yield at temp.</span><span class="v">@AgitatorCalculationService.ComputeYieldAtTemperatureMpa(shaftMat, opTemp).ToString("F1")<small>MPa</small></span></div>
+                    }
+                    <div class="rs-kv"><span class="k">Allowable shear</span><span class="v">@allowableMpa.ToString("F1")<small>MPa</small></span></div>
+                </div>
+            </section>
+        </div>
+
+        <div class="col-12 col-md-6 col-xl-3 d-flex">
+            <section class="rs-card">
+                <header class="rs-card-head">
+                    <h2 class="rs-card-title">Project summary</h2>
+                </header>
+                <div class="rs-card-body">
+                    <div class="rs-kv"><span class="k">Vessel diameter</span><span class="v">@Model.Vessel?.DiameterM.ToString("F2")<small>m</small></span></div>
+                    <div class="rs-kv"><span class="k">Liquid height</span><span class="v">@Model.Vessel?.LiquidHeightM.ToString("F2")<small>m</small></span></div>
+                    <div class="rs-kv"><span class="k">Baffles</span><span class="v">@(Model.Vessel?.HasBaffles == true ? Model.Vessel.NumberOfBaffles.ToString() : "None")</span></div>
+                    <div class="rs-kv"><span class="k">Impeller type</span><span class="v">@Model.Impeller?.Type</span></div>
+                    <div class="rs-kv"><span class="k">Impeller dia.</span><span class="v">@Model.Impeller?.DiameterM.ToString("F3")<small>m</small></span></div>
+                    <div class="rs-kv"><span class="k">Speed</span><span class="v">@Model.Impeller?.RotationalSpeedRpm.ToString("F0")<small>RPM</small></span></div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    @* ===================== ROW 2: AI (PINN) COMPARISON  |  DESIGN CHECKS ===================== *@
+    @if (showVerify)
+    {
+    <div class="row g-3 mb-3">
+        @* ---------- Section A: MANUAL vs FEA vs PINN (AI) ---------- *@
+        @if (showTable)
+        {
+        <div id="pinn-section" class="col-12 col-xl-7 d-flex">
+            <section class="rs-card">
+                <header class="rs-card-head">
+                    <h2 class="rs-card-title">AI (PINN) comparison · Manual vs FEA vs PINN</h2>
+                    @if (cmp!.PinnSkipped)
+                    {
+                        <span class="rs-chip mute">PINN skipped</span>
+                    }
+                    else if (judged > 0)
+                    {
+                        <span class="rs-chip @(agreed == judged ? "ok" : "warn")">@agreed of @judged agree</span>
                     }
                     else
                     {
-                        <div class="alert alert-secondary py-2" role="status">
+                        <span class="rs-chip mute">PINN not generated</span>
+                    }
+                </header>
+                <div class="rs-card-body">
+                    <div class="rs-table-wrap">
+                        <table class="rs-table">
+                            <thead>
+                                <tr>
+                                    <th>Quantity</th>
+                                    <th class="num">Manual</th>
+                                    <th class="num">FEA</th>
+                                    <th class="num">PINN (AI)</th>
+                                    <th class="num">PINN gap</th>
+                                    <th>Result</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var q in cmp.Quantities)
+                                {
+                                    bool hasFea = q.Fea.HasValue;
+                                    double? gapValue = hasFea ? q.PinnVsFeaPercent : q.PinnVsManualPercent;
+                                    <tr>
+                                        <th scope="row">@q.Name <span class="rs-unit">(@q.Unit)</span></th>
+                                        <td class="num @(!hasFea ? "is-ref" : "")">@Cell(q.Manual)</td>
+                                        <td class="num @(hasFea ? "is-ref" : "")">@Cell(q.Fea)</td>
+                                        <td class="num">@(cmp.PinnSkipped ? "Skipped" : Cell(q.Pinn))</td>
+                                        <td class="num">@(cmp.PinnSkipped ? "—" : Gap(gapValue))<span class="rs-sub">vs @q.ReferenceName · limit @(q.TolerancePercent.ToString("0.##")) %</span></td>
+                                        <td>
+                                            @if (cmp.PinnSkipped)
+                                            {
+                                                <span class="rs-chip mute">Skipped</span>
+                                            }
+                                            else if (q.PinnAgrees is null)
+                                            {
+                                                <span class="rs-chip mute">n/a</span>
+                                            }
+                                            else if (q.PinnAgrees == true)
+                                            {
+                                                <span class="rs-chip ok"><i class="bi bi-check-lg"></i> Agrees</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="rs-chip warn"><i class="bi bi-exclamation-triangle-fill"></i> Deviates</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <p class="rs-foot"><span class="rs-foot-box"></span>Shaded value is the reference the PINN is compared with: FEA when it was run, otherwise the manual formula.@(cmp.FeaAvailable ? "" : " FEA has not been run for this project.")</p>
+                    @if (!string.IsNullOrWhiteSpace(cmp.ModelVersion))
+                    {
+                        <p class="rs-foot mt-1">Model version @cmp.ModelVersion · PDE residual @(cmp.PinnSkipped ? "n/a" : cmp.PdeResidual.ToString("0.###e+0")) · generated @cmp.GeneratedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC</p>
+                    }
+                    @if (cmp.Notes.Count > 0)
+                    {
+                        <ul class="rs-notes" role="note">
+                            @foreach (var note in cmp.Notes)
+                            {
+                                <li>@note</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </section>
+        </div>
+        }
+
+        @* ---------- Section B: DESIGN CHECKS ---------- *@
+        <div class="@colChecks d-flex">
+            <section class="rs-card">
+                <header class="rs-card-head">
+                    <h2 class="rs-card-title">Design checks @(cmp is not null ? "· " + cmp.StandardShaftSizeMm.ToString("F0") + " mm shaft" : "")</h2>
+                    @if (cmp is not null && totalChecks > 0)
+                    {
+                        <span class="rs-chip @(passedChecks == totalChecks ? "ok" : "bad")">@passedChecks / @totalChecks passed</span>
+                    }
+                </header>
+                <div class="rs-card-body">
+                    @if (cmp is null)
+                    {
+                        <div class="alert alert-secondary py-2 mb-0" role="status">
                             <i class="bi bi-info-circle-fill"></i>
-                            No AI (PINN) prediction yet. Click "Generate Shaft Prediction (PINN)" to add the AI comparison. The design checks below use the manual formulas@(string.IsNullOrWhiteSpace(r.FeaCheckJson) ? "" : " and FEA").
+                            The design checks are not available yet. Click "Regenerate Shaft Prediction (PINN)" to refresh them.
                         </div>
                     }
-
-                    @if (Model.ShaftComparison is not null)
+                    else
                     {
-                        <h3 class="h6 mt-3">Utilization (@Model.ShaftComparison.StandardShaftSizeMm.ToString("F0") mm shaft)</h3>
-                        <div class="cockpit-note util-legend mb-3">
-                            <span><i style="background:#22c55e"></i>≤ 75 %</span>
-                            <span><i style="background:#f59e0b"></i>75–90 %</span>
-                            <span><i style="background:#ef4444"></i>&gt; 90 %</span>
-                        </div>
-                        @foreach (var c in Model.ShaftComparison.Checks)
-                        {
-                            bool inf = double.IsInfinity(c.Utilization);
-                            double pct = inf ? 100.0 : Math.Min(c.Utilization * 100.0, 100.0);
-                            string fillClass = (!c.Passed || inf || c.Utilization > 0.90) ? "u-red" : c.Utilization > 0.75 ? "u-amber" : "u-green";
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between align-items-baseline">
-                                    <div class="small fw-semibold">@c.Name <span class="text-muted fw-normal">(@c.Unit)</span> <span class="badge bg-light text-dark border">@c.Source</span></div>
-                                    <div class="small">
-                                        @if (c.Passed)
-                                        {
-                                            <span class="badge bg-success">Pass</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-danger">Fail</span>
-                                        }
+                        <div class="rs-checks">
+                            @foreach (var c in cmp.Checks)
+                            {
+                                bool inf = double.IsInfinity(c.Utilization);
+                                bool isGov = gov is not null && ReferenceEquals(c, gov);
+                                <div class="rs-check">
+                                    <div class="rs-check-top">
+                                        <span class="rs-check-ico @(c.Passed ? "ok" : "bad")"><i class="bi @(c.Passed ? "bi-check-lg" : "bi-x-lg")"></i></span>
+                                        <div class="rs-check-name">@c.Name <span class="rs-unit">(@c.Unit)</span><span class="rs-src">@c.Source</span>@if (isGov){<span class="rs-gov">Governing</span>}</div>
+                                        <div class="rs-check-pct @UCls(c.Utilization)">@UTxt(c.Utilization)</div>
+                                    </div>
+                                    <div class="rs-gauge" role="progressbar"
+                                         aria-label="@c.Name utilisation"
+                                         aria-valuenow="@UPct(c.Utilization)" aria-valuemin="0" aria-valuemax="100">
+                                        <div class="rs-gauge-fill @UCls(c.Utilization)" style="width:@(UPct(c.Utilization))%"></div>
+                                        <i class="rs-tick" style="left:75%"></i><i class="rs-tick" style="left:90%"></i>
+                                    </div>
+                                    <div class="rs-check-meta">
+                                        <span>@c.DemandLabel <b>@FmtNum(c.DemandValue)</b></span>
+                                        <span>@c.CapacityLabel <b>@FmtNum(c.CapacityValue)</b></span>
+                                        <span>Margin <b>@(inf ? "n/a" : FmtPct(c.MarginPercent))</b></span>
                                     </div>
                                 </div>
-                                <div class="util-track my-1" role="progressbar"
-                                     aria-label="@c.Name utilisation"
-                                     aria-valuenow="@pct.ToString("F0")" aria-valuemin="0" aria-valuemax="100">
-                                    <div class="util-fill @fillClass" style="width:@pct.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
-                                    <div class="util-tick" style="left:75%"></div>
-                                    <div class="util-tick" style="left:90%"></div>
-                                </div>
-                                <div class="d-flex justify-content-between cockpit-note">
-                                    <span>Demand @FmtNum(c.DemandValue) <span>@c.DemandLabel</span></span>
-                                    <span>Capacity @FmtNum(c.CapacityValue) <span>@c.CapacityLabel</span></span>
-                                    <span>@(inf ? "n/a" : (c.Utilization * 100.0).ToString("F1") + " %") | @(inf ? "n/a" : FmtPct(c.MarginPercent))</span>
-                                </div>
-                            </div>
-                        }
-                        <p class="cockpit-note mb-0">Shafts come in fixed sizes, so the exact calculated size is moved up to the next available size.</p>
+                            }
+                        </div>
+
+                        <div class="rs-legend">
+                            <span><i style="background:#16a34a"></i>≤ 75 % safe</span>
+                            <span><i style="background:#f59e0b"></i>75–90 % watch</span>
+                            <span><i style="background:#dc2626"></i>&gt; 90 % critical</span>
+                        </div>
+                        <p class="rs-foot">Shafts come in fixed sizes, so the exact calculated size is moved up to the next available size.</p>
                     }
                 </div>
+            </section>
+        </div>
+    </div>
+    }
+    else if (!showCad)
+    {
+        <div class="row g-3 mb-3">
+            <div class="col-12">
+                <section class="rs-card">
+                    <div class="rs-card-body">
+                        <div class="rs-empty" style="height:200px;"><i class="bi bi-cpu"></i><span>No advanced analysis started yet. Use "Generate 3D Model (FreeCAD)" or "Generate Shaft Prediction (PINN)" in the header.</span></div>
+                    </div>
+                </section>
             </div>
         </div>
-        }
+    }
 
-        @* ---------- Column A: 3D MODEL + FEA ---------- *@
-        @if (showCad)
-        {
-        <div id="model-section" class="@row2Col d-flex">
-            <div class="cockpit-card d-flex flex-column h-100 w-100">
-                <div class="cockpit-card-head">
-                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <div class="d-flex align-items-center gap-2">
-                            <h2 class="cockpit-title">3D model and FEA check</h2>
-                            <span id="cad-badge" class="badge @badgeClass">@r.CadStatus</span>
-                        </div>
-                        <div class="d-flex gap-2">
-                            @if (r.CadStatus == CadJobStatus.Failed)
+    @* ===================== ROW 3 (LAST, SEPARATE): 3D MODEL + FEA CHECK ===================== *@
+    @if (showCad)
+    {
+    <div class="row g-3">
+        <div id="model-section" class="col-12 d-flex">
+            <section class="rs-card">
+                <header class="rs-card-head">
+                    <div class="d-flex align-items-center gap-2">
+                        <h2 class="rs-card-title">3D model &amp; FEA check</h2>
+                        <span id="cad-badge" class="badge @badgeClass">@r.CadStatus</span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        @if (cadDone)
+                        {
+                            <a class="btn btn-outline-secondary btn-sm" href="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"><i class="bi bi-download"></i> STEP file</a>
+                        }
+                        @if (r.CadStatus == CadJobStatus.Failed)
+                        {
+                            <form asp-action="ChangeStatus" asp-route-id="@Model.Id" method="post">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-outline-warning btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reset Status</button>
+                            </form>
+                        }
+                    </div>
+                </header>
+                <div class="rs-card-body">
+                    @if (!cadDone)
+                    {
+                        <p class="rs-cap">Generating the 3D model also runs the shaft FEA check. Both finish before the status shows Completed.</p>
+                    }
+
+                    <div class="row g-3">
+                        <div class="col-12 col-xl-8">
+                            @if (cadDone)
                             {
-                                <form asp-action="ChangeStatus" asp-route-id="@Model.Id" method="post">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-outline-warning btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reset Status</button>
-                                </form>
+                                <div id="viewer-container"
+                                     data-step-url="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"
+                                     data-preview-url="@(string.IsNullOrEmpty(r.CadPreviewMeshPath) ? null : Url.Action("PreviewMesh", "Projects", new { id = Model.Id }))"></div>
                             }
+                            else if (r.CadStatus == CadJobStatus.Failed)
+                            {
+                                <div class="alert alert-danger py-2 mb-0" role="alert"><i class="bi bi-x-circle"></i> 3D model generation failed. @r.CadJobError</div>
+                            }
+                            else if (cadBusy)
+                            {
+                                <div id="cad-progress" class="alert alert-info py-2 d-flex align-items-center gap-2 mb-0" role="status">
+                                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                                    <span id="cad-progress-text">Model generation in progress. This page updates automatically.</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="rs-empty"><i class="bi bi-box"></i><span>No 3D model generated yet. Click "Generate 3D Model (FreeCAD)".</span></div>
+                            }
+                        </div>
+
+                        <div class="col-12 col-xl-4">
+                            <div class="rs-fea side">
+                                <div class="rs-fea-head">
+                                    <span class="rs-fea-title">Shaft FEA check (Finite Element Analysis)</span>
+                                    @if (string.IsNullOrWhiteSpace(r.FeaCheckJson))
+                                    {
+                                        <span class="rs-chip mute">Not run</span>
+                                    }
+                                    else if (feaStatus == "ok" && feaPassed)
+                                    {
+                                        <span class="rs-chip ok"><i class="bi bi-check-circle-fill"></i> Passed</span>
+                                    }
+                                    else if (feaStatus == "ok")
+                                    {
+                                        <span class="rs-chip bad"><i class="bi bi-x-circle-fill"></i> Failed</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="rs-chip warn"><i class="bi bi-exclamation-triangle-fill"></i> Warning</span>
+                                    }
+                                </div>
+
+                                @if (string.IsNullOrWhiteSpace(r.FeaCheckJson))
+                                {
+                                    <p class="rs-cap mb-0">Not run yet. The FEA check runs automatically after "Generate 3D Model (FreeCAD)".</p>
+                                }
+                                else if (feaStatus == "ok")
+                                {
+                                    <div class="rs-fea-main">
+                                        <div class="rs-fea-big">@feaStress.ToString("F2")<small>MPa max shear</small></div>
+                                        <div class="rs-fea-sub">@((feaUtilization * 100.0).ToString("F0")) % of @feaAllowable.ToString("F1") MPa allowable</div>
+                                    </div>
+                                    <div class="rs-gauge" role="progressbar" aria-label="FEA utilisation"
+                                         aria-valuenow="@UPct(feaUtilization)" aria-valuemin="0" aria-valuemax="100">
+                                        <div class="rs-gauge-fill @UCls(feaUtilization)" style="width:@(UPct(feaUtilization))%"></div>
+                                        <i class="rs-tick" style="left:75%"></i><i class="rs-tick" style="left:90%"></i>
+                                    </div>
+                                    <div class="rs-tiles">
+                                        <div class="rs-tile"><div class="k">Shaft size checked</div><div class="v">@r.RecommendedShaftDiameterMm.ToString("F0")<small>mm</small></div></div>
+                                        @if (feaVonMises.HasValue)
+                                        {
+                                            <div class="rs-tile"><div class="k">von Mises stress</div><div class="v">@feaVonMises.Value.ToString("F2")<small>MPa</small></div></div>
+                                        }
+                                        @if (feaTipDeflection.HasValue)
+                                        {
+                                            <div class="rs-tile"><div class="k">Tip deflection</div><div class="v">@feaTipDeflection.Value.ToString("F3")<small>mm</small></div></div>
+                                        }
+                                        @if (feaTwist.HasValue)
+                                        {
+                                            <div class="rs-tile"><div class="k">Angle of twist</div><div class="v">@feaTwist.Value.ToString("F3")<small>°</small></div></div>
+                                        }
+                                    </div>
+                                    <p class="rs-foot">The FEA applies the real loads to a 3D model of the shaft. It excludes the 1.5 bending safety factor used in the formula, so its stress is normally lower than the formula stress. Checked @r.FeaCheckedAt?.ToString("yyyy-MM-dd HH:mm") UTC.</p>
+                                }
+                                else
+                                {
+                                    <div class="alert alert-warning py-2 mb-0" role="alert">
+                                        <i class="bi bi-exclamation-triangle-fill"></i> The FEA check could not be completed. @feaError
+                                    </div>
+                                }
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="cockpit-card-body">
-                    <p class="cockpit-note">Generating the 3D model also runs the shaft FEA check. Both finish before the status shows Completed.</p>
-
-                    @if (r.CadStatus == CadJobStatus.Completed && r.CadStepFilePath != null)
-                    {
-                        <div id="viewer-container"
-                             data-step-url="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"
-                             data-preview-url="@(string.IsNullOrEmpty(r.CadPreviewMeshPath) ? null : Url.Action("PreviewMesh", "Projects", new { id = Model.Id }))"
-                             style="width:100%;height:300px;background:#f1f5f9;border-radius:6px;"></div>
-                        <p class="mt-2 mb-3 small"><a href="@Url.Action("DownloadCadStep", "Projects", new { id = Model.Id })"><i class="bi bi-download"></i> Download STEP file</a></p>
-                    }
-                    else if (r.CadStatus == CadJobStatus.Failed)
-                    {
-                        <div class="alert alert-danger py-2" role="alert"><i class="bi bi-x-circle"></i> 3D model generation failed. @r.CadJobError</div>
-                    }
-                    else if (cadBusy)
-                    {
-                        <div id="cad-progress" class="alert alert-info py-2 d-flex align-items-center gap-2" role="status">
-                            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-                            <span id="cad-progress-text">Model generation in progress. This page updates automatically.</span>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="viewer-empty">No 3D model generated yet. Click "Generate 3D Model (FreeCAD)".</div>
-                    }
-
-                    <h3 class="h6 mt-3">Shaft FEA check (Finite Element Analysis)</h3>
-                    @if (string.IsNullOrWhiteSpace(r.FeaCheckJson))
-                    {
-                        <p class="text-muted small mb-0">Not run yet. The FEA check runs automatically after "Generate 3D Model (FreeCAD)".</p>
-                    }
-                    else if (feaStatus == "ok")
-                    {
-                        if (feaPassed)
-                        {
-                            <div class="alert alert-success py-2" role="status">
-                                <i class="bi bi-check-circle-fill"></i> FEA check passed. The stress in the recommended shaft is below the allowable limit.
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="alert alert-danger py-2" role="alert">
-                                <i class="bi bi-x-circle-fill"></i> FEA check failed. The stress in the recommended shaft is above the allowable limit. Please ask an engineer to review.
-                            </div>
-                        }
-                        <table class="table table-sm kv mb-2">
-                            <tr><th>Shaft size checked</th><td>@r.RecommendedShaftDiameterMm.ToString("F0") mm</td></tr>
-                            <tr><th>FEA maximum shear stress</th><td>@feaStress.ToString("F2") MPa</td></tr>
-                            <tr><th>Allowable shear stress</th><td>@feaAllowable.ToString("F1") MPa</td></tr>
-                            <tr><th>Utilization</th><td>@((feaUtilization * 100.0).ToString("F0")) %</td></tr>
-                            @if (feaVonMises.HasValue)
-                            {
-                                <tr><th>FEA von Mises stress</th><td>@feaVonMises.Value.ToString("F2") MPa</td></tr>
-                            }
-                            @if (feaTipDeflection.HasValue)
-                            {
-                                <tr><th>FEA tip deflection</th><td>@feaTipDeflection.Value.ToString("F3") mm</td></tr>
-                            }
-                            @if (feaTwist.HasValue)
-                            {
-                                <tr><th>FEA angle of twist</th><td>@feaTwist.Value.ToString("F3") °</td></tr>
-                            }
-                        </table>
-                        <p class="cockpit-note mb-1">The FEA applies the real loads to a 3D model of the shaft. It does not include the 1.5 bending safety factor used in the formula, so its stress is normally lower than the formula stress.</p>
-                        <p class="cockpit-note mb-0">Checked @r.FeaCheckedAt?.ToString("yyyy-MM-dd HH:mm") UTC</p>
-                    }
-                    else
-                    {
-                        <div class="alert alert-warning py-2 mb-0" role="alert">
-                            <i class="bi bi-exclamation-triangle-fill"></i> The FEA check could not be completed. @feaError
-                        </div>
-                    }
-                </div>
-            </div>
+            </section>
         </div>
-        }
     </div>
-    }
-    else
-    {
-        <div class="cockpit-lower d-flex">
-            <div class="cockpit-card w-100 align-items-center justify-content-center text-center">
-                <div class="cockpit-note p-3">No advanced analysis started yet. Use "Generate 3D Model (FreeCAD)" or "Generate Shaft Prediction (PINN)" in the header.</div>
-            </div>
-        </div>
     }
 }
 
